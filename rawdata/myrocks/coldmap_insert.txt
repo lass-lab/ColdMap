@@ -1,0 +1,344 @@
+mysql> ^DBye
+minsky@minsky-MS-7E13:~$ 
+
+sysbench \
+  --db-driver=mysql \
+  --mysql-socket=/tmp/mysql.sock \
+  --mysql-port=3307 \
+  --mysql-user=root \
+  --mysql-db=sbtest \
+  --tables=4 \
+  --table-size=30000000 \
+  --threads=16 \
+  --time=3600 \
+  oltp_insert run
+  
+sysbench 1.0.20 (using system LuaJIT 2.1.0-beta3)
+
+Running the test with following options:
+Number of threads: 16
+Initializing random number generator from current time
+
+
+(341776924−70742945)÷(3650-550)=88863.599672131
+
+550	35	479	70742945	33	0	0	60	
+3650	26	2459	341776924	33	227908	941186	815	
+///
+3050	27	2274	317444418	33	142288	595848	689	
+
+
+Initializing worker threads...
+
+Threads started!
+
+SQL statistics:
+    queries performed:
+        read:                            0
+        write:                           341761062
+        other:                           0
+        total:                           341761062
+    transactions:                        341761062 (94905.19 per sec.)
+    queries:                             341761062 (94905.19 per sec.)
+    ignored errors:                      0      (0.00 per sec.)
+    reconnects:                          0      (0.00 per sec.)
+
+General statistics:
+    total time:                          3601.0780s
+    total number of events:              341761062
+
+Latency (ms):
+         min:                                    0.03
+         avg:                                    0.17
+         max:                                11615.26
+         95th percentile:                        0.23
+         sum:                             57293524.30
+
+Threads fairness:
+    events (avg/stddev):           21360066.3750/6369.99
+    execution time (avg/stddev):   3580.8453/0.09
+
+minsky@minsky-MS-7E13:~$ 
+
+
+minsky@minsky-MS-7E13:~/mariadb-10.2$ sudo rm -rf /home/minsky/mariadb-10.2/mysql-test/var
+(cd mysql-test; ./mtr alias)
+cp -r /home/minsky/mariadb-10.2/mysql-test/var/install.db ~/data1
+
+/home/minsky/mariadb-10.2/sql/mysqld --defaults-file=/home/minsky/coldmap.cnf
+
+[sudo] minsky 암호: 
+Logging: ./mtr  alias
+VS config: 
+vardir: /home/minsky/mariadb-10.2/mysql-test/var
+Removing old var directory...
+Creating var directory '/home/minsky/mariadb-10.2/mysql-test/var'...
+Checking supported features...
+MariaDB Version 10.2.44-1-MariaDB
+ - SSL connections supported
+ - binaries built with wsrep patch
+Collecting tests...
+Installing system database...
+
+==============================================================================
+
+TEST                                      RESULT   TIME (ms) or COMMENT
+--------------------------------------------------------------------------
+
+worker[1] Using MTR_BUILD_THREAD 300, with reserved ports 16000..16019
+main.alias                               [ pass ]     23
+--------------------------------------------------------------------------
+The servers were restarted 0 times
+Spent 0.023 of 3 seconds executing testcases
+
+Completed: All 1 tests were successful.
+
+2025-06-23 20:37:30 124649977767744 [Note] /home/minsky/mariadb-10.2/sql/mysqld (mysqld 10.2.44-1-MariaDB) starting as process 3263997 ...
+New Zoned Block Device: /dev/nvme1n2info.nr_zones 904
+Debug: max_nr_active_zones=14, max_nr_open_zones=14
+Zone block device nr zones: 904 max active: 14 (12) max open: 14(12) 
+zone_rep->ZoneCount() 904
+active io zones :  0
+io_zones.size() : 100
+zone sz 0
+device free space : 204800
+2025-06-23 20:37:31 124649977767744 [Note] RocksDB: Got ENOENT when listing column families
+2025-06-23 20:37:31 124649977767744 [Note] RocksDB:   assuming that we're creating a new database
+2025-06-23 20:37:31 124649977767744 [Note] RocksDB: Column Families at start:
+2025-06-23 20:37:31 124649977767744 [Note]   cf=default
+2025-06-23 20:37:31 124649977767744 [Note]     write_buffer_size=67108864
+2025-06-23 20:37:31 124649977767744 [Note]     target_file_size_base=67108864
+starting bg_reset_workerrocksdb_init_func@@@@@ env is nullptr ? no 0x57f7d0f00eb0 filesystem 0x57f7d0f4dc30
+rocksdb_reset_scheme 1
+RocksDB Options:
+  max_background_compactions           = 8
+  max_subcompactions                   = 8
+  max_background_flushes               = 8
+  level0_stop_writes_trigger           = 8
+  level0_file_num_compaction_trigger   = 4
+  level0_slowdown_writes_trigger       = 8
+  soft_pending_compaction_bytes_limit  = 171798691840
+  hard_pending_compaction_bytes_limit  = 171798691840
+reclaim until 25~25
+reset_scheme 1 partial_reset_scheme 1 tuning_point 0 allocation_scheme 2 compaction_scheme 0 input_aware_scheme 0 zc_scheme 3 alpha_value 0.500000 sigma_value 0.000000 disable finish 1 predict_cnt 8
+ZenFS::SetResetScheme: r = 1, T = 0, allocation_schme = 2, zc_scheme = 3, finish_scheme = 1, predict_cnt = 8
+zbd_->SetResetScheme: r = 1, T = 0, allocation_schme = 2, zc_scheme = 3, finish_scheme = 1, predict_cnt = 8
+other options 0
+other options 0
+other options 0
+0 : 0
+1 : 0
+2 : 0
+3 : 0
+4 : 0
+5 : 0
+6 : 0
+7 : 0
+8 : 0
+9 : 0
+10 : 0
+11 : 0
+12 : 0
+13 : 0
+14 : 0
+15 : 0
+16 : 0
+17 : 0
+18 : 0
+19 : 0
+20 : 0
+21 : 0
+22 : 0
+23 : 0
+24 : 0
+25 : 0
+26 : 0
+27 : 0
+28 : 0
+29 : 0
+30 : 0
+31 : 0
+32 : 0
+33 : 0
+34 : 0
+35 : 0
+36 : 0
+37 : 0
+38 : 0
+39 : 0
+40 : 0
+41 : 0
+42 : 0
+43 : 0
+44 : 0
+45 : 0
+46 : 0
+47 : 0
+48 : 0
+49 : 0
+50 : 0
+51 : 0
+52 : 0
+53 : 0
+54 : 0
+55 : 0
+56 : 0
+57 : 0
+58 : 0
+59 : 0
+60 : 0
+61 : 0
+62 : 0
+63 : 0
+64 : 0
+65 : 0
+66 : 0
+67 : 0
+68 : 0
+69 : 0
+70 : 0
+71 : 0
+72 : 0
+73 : 0
+74 : 0
+75 : 0
+76 : 0
+77 : 0
+78 : 0
+79 : 0
+80 : 0
+81 : 0
+82 : 0
+83 : 0
+84 : 0
+85 : 0
+86 : 0
+87 : 0
+88 : 0
+89 : 0
+90 : 0
+91 : 0
+92 : 0
+93 : 0
+94 : 0
+95 : 0
+96 : 0
+97 : 0
+98 : 0
+99 : 0
+100 : 0
+2025-06-23 20:37:31 124649977767744 [Note] RocksDB: creating a column family __system__
+2025-06-23 20:37:31 124649977767744 [Note]     write_buffer_size=67108864
+2025-06-23 20:37:31 124649977767744 [Note]     target_file_size_base=67108864
+2025-06-23 20:37:31 124649977767744 [Note] RocksDB: Table_store: loaded DDL data for 0 tables
+2025-06-23 20:37:31 124649977767744 [Note] RocksDB: global statistics using get_sched_indexer_t indexer
+2025-06-23 20:37:31 124649977767744 [Note] MyRocks storage engine plugin has been successfully initialized.
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: Mutexes and rw_locks use GCC atomic builtins
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: Uses event mutexes
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: Compressed tables use zlib 1.2.11
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: Using Linux native AIO
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: Number of pools: 1
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: Using SSE2 crc32 instructions
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: Initializing buffer pool, total size = 128M, instances = 1, chunk size = 128M
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: Completed initialization of buffer pool
+2025-06-23 20:37:31 124649002231360 [Note] InnoDB: If the mysqld execution user is authorized, page cleaner thread priority can be changed. See the man page of setpriority().
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: Highest supported file format is Barracuda.
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: Resizing redo log from 2*5242880 to 2*50331648 bytes; LSN=1628237
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: Starting to delete and rewrite log files.
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: Setting log file ./ib_logfile101 size to 50331648 bytes
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: Setting log file ./ib_logfile1 size to 50331648 bytes
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: Renaming log file ./ib_logfile101 to ./ib_logfile0
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: New log files created, LSN=1628237
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: 128 out of 128 rollback segments are active.
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: Creating shared tablespace for temporary tables
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: Setting file './ibtmp1' size to 12 MB. Physically writing the file full; Please wait ...
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: File './ibtmp1' size is now 12 MB.
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: Waiting for purge to start
+2025-06-23 20:37:31 124649977767744 [Note] InnoDB: 5.7.38 started; log sequence number 1628237
+2025-06-23 20:37:31 124647891904064 [Note] InnoDB: Loading buffer pool(s) from /home/minsky/mariadb-10.2/mysql-test/var/install.db/ib_buffer_pool
+2025-06-23 20:37:31 124647891904064 [Note] InnoDB: Buffer pool(s) load completed at 250623 20:37:31
+2025-06-23 20:37:31 124649977767744 [Note] Plugin 'FEEDBACK' is disabled.
+2025-06-23 20:37:31 124649977767744 [Note] Server socket created on IP: '::'.
+2025-06-23 20:37:31 124649977767744 [Note] Reading of all Master_info entries succeeded
+2025-06-23 20:37:31 124649977767744 [Note] Added new Master_info '' to hash table
+2025-06-23 20:37:31 124649977767744 [Note] /home/minsky/mariadb-10.2/sql/mysqld: ready for connections.
+Version: '10.2.44-1-MariaDB'  socket: '/tmp/mysql.sock'  port: 3307  Source distribution
+0	100	2	2	5	0	0	0	
+50	93	69	5758560	33	0	0	0	
+100	84	107	12466705	33	0	0	1	
+150	78	148	19186619	33	0	0	7	
+200	71	188	25977679	33	0	0	11	
+250	64	229	32634532	33	0	0	15	
+300	59	271	39054570	33	0	0	23	
+350	53	313	45632189	33	0	0	28	
+400	54	353	52020395	33	0	0	41	
+450	45	395	58398659	33	0	0	45	
+500	41	434	64536558	33	0	0	54	
+550	35	479	70742945	33	0	0	60	
+600	30	524	77086724	33	1	42	68	
+650	30	567	83435734	33	5	217	80	
+700	29	612	89464803	33	16	423	92	
+750	31	656	95467544	33	161	1425	108	
+800	31	702	101719103	33	562	3741	120	
+850	27	745	107994123	33	827	5383	129	
+900	28	791	114072731	33	1533	9131	144	
+950	29	835	119908803	33	2259	12470	158	
+1000	29	875	126034880	33	2821	15286	171	
+1050	27	919	131731534	33	3768	19748	184	
+1100	29	964	137550630	33	5133	26091	199	
+1150	29	1005	143233703	33	6156	31120	212	
+1200	30	1045	148818026	33	7918	38825	226	
+1250	27	1087	154765654	33	8674	42670	236	
+1300	28	1128	160160589	33	10222	49645	250	
+1350	30	1165	165663202	33	12205	58186	265	
+1400	29	1209	171729772	33	13533	64344	277	
+1450	29	1248	177114392	33	15427	72161	290	
+1500	29	1285	182568679	33	17572	80767	302	
+1550	29	1321	188119266	33	19199	88522	313	
+1600	31	1358	193337655	33	21342	98124	327	
+1650	29	1392	197993642	33	23188	105929	336	
+1700	27	1431	203416896	33	25274	114827	347	
+1750	30	1463	208121597	33	28575	128580	363	
+1800	29	1506	214029238	33	29369	133131	374	
+1850	30	1539	218650463	33	32417	145843	389	
+1900	29	1575	223757547	33	34971	156602	401	
+1950	28	1609	228329202	33	38545	170809	413	
+2000	28	1649	233677375	33	40100	177832	425	
+2050	30	1679	238200351	33	43751	193538	440	
+2100	27	1717	243689654	33	45754	201974	449	
+2150	28	1749	248198806	33	49474	217640	462	
+2200	29	1775	251992295	33	54791	239203	476	
+2250	28	1812	257364013	33	57083	249266	487	
+2300	28	1847	262261164	33	59852	261002	500	
+2350	27	1882	266624297	33	63760	276795	512	
+2400	28	1920	272016026	33	65924	286107	525	
+2450	28	1948	275866063	33	70883	304557	537	
+2500	27	1982	280196868	33	74772	319302	549	
+2550	28	2021	284921221	33	77834	334273	562	
+2600	27	2053	288777431	33	83051	356337	575	
+2650	27	2085	292913633	33	87721	375598	587	
+2700	27	2113	296355585	33	94173	401661	601	
+2750	27	2138	299891036	33	100146	425922	613	
+2800	27	2160	302429087	33	107687	456470	626	
+2850	27	2187	306336159	33	113115	480018	638	
+2900	28	2210	309497694	33	120011	509124	652	
+2950	28	2231	311825813	33	127935	538715	665	
+3000	27	2254	314710426	33	135031	567395	676	
+3050	27	2274	317444418	33	142288	595848	689	
+3100	27	2288	319419516	33	151298	630661	701	
+3150	26	2304	321628782	33	159782	665287	713	
+3200	27	2324	324321324	33	167033	696098	726	
+3250	27	2347	327173179	33	173720	722910	738	
+3300	26	2369	330076699	33	179389	745284	748	
+3350	27	2385	332103524	33	187036	776168	760	
+3400	27	2398	333919092	33	194970	807524	770	
+3450	27	2413	336024654	33	202762	837965	781	
+3500	28	2431	338340305	33	211233	873752	794	
+3550	26	2442	340217056	33	217297	896284	801	
+3600	26	2453	341498528	33	226106	932078	812	
+3650	26	2459	341776924	33	227908	941186	815	
+
+
+
+
+

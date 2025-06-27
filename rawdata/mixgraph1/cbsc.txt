@@ -1,0 +1,2477 @@
+minsky@minsky-MS-7E13:~/EZC$ cat bench_fill_mixput50_theta.sh
+ROCKSDB_PATH=/home/minsky/EZC/rocksdb
+LOG_PATH=/home/minsky/EZC/log_
+RAW_ZNS=nvme1n2
+RAW_ZNS_PATH=/sys/block/${RAW_ZNS}/queue/scheduler
+RESULT_DIR_PATH=/home/minsky/EZC/data
+ZNS_SCHEDULER=/sys/block/${RAW_ZNS}/queue/scheduler
+
+## zc_scheme
+GREEDY=0
+INVAL=5
+LIZA=2
+CBZC=3
+
+## Dataset
+MED=125829120
+#MED=94371840
+#MED=136314880
+#MED=10485760
+#MED=62914560 #60
+#MED=167772160 #164
+#MED=12582912 # 12
+#MED=138412032 # 132
+#MED=73400320 #70GB
+#MED=9437184 #9GB
+#MED=67108864 #64GB
+#MED=10485760
+##Tuning Point
+T=80
+T_COMPACTION=4
+T_FLUSH=1
+T_SUBCOMPACTION=8
+ZC_KICKS=25
+UNTIL=25
+
+# sudo rm -rf ${RESULT_DIR_PATH}
+# mkdir ${RESULT_DIR_PATH}
+
+#for SCHEME in $CBZC
+for SCHEME in  $INVAL $GREEDY $CBZC
+do
+    for alpha in 0.5
+    do
+    for N in 8
+    do
+    for run in fill_mixput80_theta512; do
+
+	if [ $SCHEME -eq $GREEDY ]; then
+                RESULT_PATH="${RESULT_DIR_PATH}/dbbench_GREEDY_${run}"
+		zc_scheme=0
+		predict_cnt=0
+
+            elif [ $SCHEME -eq $INVAL ]; then
+                RESULT_PATH="${RESULT_DIR_PATH}/dbbench_CBSC_${run}"
+		zc_scheme=5
+		predict_cnt=${N}
+            elif [ $SCHEME -eq $LIZA ]; then
+                RESULT_PATH="${RESULT_DIR_PATH}/dbbench_LIZA_${run}"
+		zc_scheme=2
+		predict_cnt=${N}
+            elif [ $SCHEME -eq $CBZC ]; then
+                RESULT_PATH=${RESULT_DIR_PATH}/fill_CBZC_${N}STEP_a${alpha}_${run}
+		zc_scheme=3
+		predict_cnt=${N}
+
+            else
+                echo "error"
+            fi
+
+	      if [ -f ${RESULT_PATH} ]; then
+                    echo "already $RESULT_PATH exists"
+                    # sleep 30
+                    sleep 5
+                    continue
+                     break
+                fi
+
+
+        echo "mq-deadline" | sudo tee ${ZNS_SCHEDULER}
+        sudo rm -rf ${LOG_PATH}
+        mkdir ${LOG_PATH}
+        sudo nvme zns reset-zone /dev/${RAW_ZNS} -a
+        sudo ${ROCKSDB_PATH}/plugin/zenfs/util/zenfs mkfs --force --enable_gc --zbd=${RAW_ZNS} --aux_path=${LOG_PATH} > asdf
+        sleep 3
+
+        echo $RESULT_PATH
+# updaterandom
+	#   --benchmarks="fillrandom,overwrite,updaterandom,deleterandom,readrandomwriterandom,mixgraph,stats" \
+	#   --benchmarks="updaterandom,stats" \
+#--benchmarks="fillrandom,updaterandom,mixgraph,deleterandom,readrandomwriterandom,overwrite,stats" \
+
+# deleterandom
+        sudo ${ROCKSDB_PATH}/db_bench  \
+  	--fs_uri=zenfs://dev:${RAW_ZNS} \
+	--benchmarks="fillrandom,mixgraph" \
+  	-statistics \
+  	-file_opening_threads=4 \
+  	-max_background_compactions=${T_COMPACTION} \
+  	-max_background_flushes=${T_FLUSH} \
+  	-subcompactions=${T_SUBCOMPACTION} \
+	-seed=1739254486043241 \
+  	-histogram \
+  	-tuning_point=$T \
+  	-reset_scheme=1 \
+  	-partial_reset_scheme=1 \
+  	-zc=${ZC_KICKS} \
+  	-until=${UNTIL} \
+  	-allocation_scheme=2 \
+  	-zc_scheme=${zc_scheme} \
+  	-compaction_scheme=0 \
+  	-input_aware_scheme=0 \
+  	-max_compaction_kick=0 \
+  	-finish_scheme=1 \
+  	-predict_cnt=${predict_cnt} \
+  	-alpha_value=${alpha} \
+  	-is_db_bench=true \
+  	-cache_size=268435456 \
+  	-keyrange_dist_a=14.18 \
+  	-keyrange_dist_b=-2.917 \
+  	-keyrange_dist_c=0.0164 \
+  	-keyrange_dist_d=-0.08082 \
+  	-keyrange_num=30 \
+  	-value_k=0.2615 \
+  	-value_sigma=25.45 \
+  	-iter_k=2.517 \
+  	-iter_sigma=14.236 \
+	-value_theta=512 \
+  	-mix_get_ratio=0.17 \
+  	-mix_put_ratio=0.80 \
+  	-mix_seek_ratio=0.03 \
+  	-sine_mix_rate_interval_milliseconds=5000 \
+  	-sine_a=1000 \
+  	-sine_b=0.000073 \
+  	-sine_d=4500 \
+  	--perf_level=2 \
+  	-reads=${MED} \
+  	-num=${MED} \
+	-value_size=1024\
+  	-key_size=48\
+	-use_existing_db=0 > "${RESULT_DIR_PATH}/tmp"
+
+
+	if [ -f "${RESULT_DIR_PATH}/tmp" ]; then
+                cat "${RESULT_DIR_PATH}/tmp" > "${RESULT_PATH}"
+                rm -rf "${RESULT_DIR_PATH}/tmp"
+            fi
+
+
+        echo "Result saved to ${RESULT_PATH}"
+    done
+    sleep 5
+done
+done
+done
+
+
+
+minsky@minsky-MS-7E13:~/EZC/data$ cat dbbench_CBSC_fill_mixput80_theta512
+info.nr_zones 904
+Debug: max_nr_active_zones=14, max_nr_open_zones=14
+Zone block device nr zones: 904 max active: 14 (12) max open: 14(12) 
+zone_rep->ZoneCount() 904
+active io zones :  0
+io_zones.size() : 100
+zone sz 0
+device free space : 204800
+starting bg_reset_workerRuntimeZoneResetDisabled!!
+RuntimeZoneResetDisabled!!
+Initializing RocksDB Options from the specified file
+Initializing RocksDB Options from command-line flags
+reclaim until 25~25
+reset_scheme 1 partial_reset_scheme 1 tuning_point 80 allocation_scheme 2 compaction_scheme 0 input_aware_scheme 0 zc_scheme 5 alpha_value 0.500000 sigma_value 0.000000 disable finish 1 predict_cnt 8
+ZenFS::SetResetScheme: r = 1, T = 80, allocation_schme = 2, zc_scheme = 5, finish_scheme = 1, predict_cnt = 8
+zbd_->SetResetScheme: r = 1, T = 80, allocation_schme = 2, zc_scheme = 5, finish_scheme = 1, predict_cnt = 8
+other options 0
+other options 0
+other options 1048576
+0 : 0
+1 : 0
+2 : 0
+3 : 0
+4 : 0
+5 : 0
+6 : 0
+7 : 0
+8 : 0
+9 : 0
+10 : 0
+11 : 0
+12 : 0
+13 : 0
+14 : 0
+15 : 0
+16 : 0
+17 : 0
+18 : 0
+19 : 0
+20 : 0
+21 : 0
+22 : 0
+23 : 0
+24 : 0
+25 : 0
+26 : 0
+27 : 0
+28 : 0
+29 : 0
+30 : 0
+31 : 0
+32 : 0
+33 : 0
+34 : 0
+35 : 0
+36 : 0
+37 : 0
+38 : 0
+39 : 0
+40 : 0
+41 : 0
+42 : 0
+43 : 0
+44 : 0
+45 : 0
+46 : 0
+47 : 0
+48 : 0
+49 : 0
+50 : 0
+51 : 0
+52 : 0
+53 : 0
+54 : 0
+55 : 0
+56 : 0
+57 : 0
+58 : 0
+59 : 0
+60 : 0
+61 : 0
+62 : 0
+63 : 0
+64 : 0
+65 : 0
+66 : 0
+67 : 0
+68 : 0
+69 : 0
+70 : 0
+71 : 0
+72 : 0
+73 : 0
+74 : 0
+75 : 0
+76 : 0
+77 : 0
+78 : 0
+79 : 0
+80 : 0
+81 : 0
+82 : 0
+83 : 0
+84 : 0
+85 : 0
+86 : 0
+87 : 0
+88 : 0
+89 : 0
+90 : 0
+91 : 0
+92 : 0
+93 : 0
+94 : 0
+95 : 0
+96 : 0
+97 : 0
+98 : 0
+99 : 0
+100 : 0
+Keys:       48 bytes each (+ 0 bytes user-defined timestamp)
+Values:     1024 bytes each (512 bytes after compression)
+Entries:    125829120
+Prefix:    0 bytes
+Keys per prefix:    0
+RawSize:    128640.0 MB (estimated)
+FileSize:   67200.0 MB (estimated)
+Write rate: 0 bytes/second
+Read rate: 0 ops/second
+Compression: Snappy
+Compression sampling rate: 0
+Memtablerep: SkipListFactory
+Perf Level: 2
+------------------------------------------------
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+Initializing RocksDB Options from the specified file
+Initializing RocksDB Options from command-line flags
+reclaim until 25~25
+reset_scheme 1 partial_reset_scheme 1 tuning_point 80 allocation_scheme 2 compaction_scheme 0 input_aware_scheme 0 zc_scheme 5 alpha_value 0.500000 sigma_value 0.000000 disable finish 1 predict_cnt 8
+ZenFS::SetResetScheme: r = 1, T = 80, allocation_schme = 2, zc_scheme = 5, finish_scheme = 1, predict_cnt = 8
+zbd_->SetResetScheme: r = 1, T = 80, allocation_schme = 2, zc_scheme = 5, finish_scheme = 1, predict_cnt = 8
+other options 0
+other options 0
+other options 1048576
+0 : 0
+1 : 0
+2 : 0
+3 : 0
+4 : 0
+5 : 0
+6 : 0
+7 : 0
+8 : 0
+9 : 0
+10 : 0
+11 : 0
+12 : 0
+13 : 0
+14 : 0
+15 : 0
+16 : 0
+17 : 0
+18 : 0
+19 : 0
+20 : 0
+21 : 0
+22 : 0
+23 : 0
+24 : 0
+25 : 0
+26 : 0
+27 : 0
+28 : 0
+29 : 0
+30 : 0
+31 : 0
+32 : 0
+33 : 0
+34 : 0
+35 : 0
+36 : 0
+37 : 0
+38 : 0
+39 : 0
+40 : 0
+41 : 0
+42 : 0
+43 : 0
+44 : 0
+45 : 0
+46 : 0
+47 : 0
+48 : 0
+49 : 0
+50 : 0
+51 : 0
+52 : 0
+53 : 0
+54 : 0
+55 : 0
+56 : 0
+57 : 0
+58 : 0
+59 : 0
+60 : 0
+61 : 0
+62 : 0
+63 : 0
+64 : 0
+65 : 0
+66 : 0
+67 : 0
+68 : 0
+69 : 0
+70 : 0
+71 : 0
+72 : 0
+73 : 0
+74 : 0
+75 : 0
+76 : 0
+77 : 0
+78 : 0
+79 : 0
+80 : 0
+81 : 0
+82 : 0
+83 : 0
+84 : 0
+85 : 0
+86 : 0
+87 : 0
+88 : 0
+89 : 0
+90 : 0
+91 : 0
+92 : 0
+93 : 0
+94 : 0
+95 : 0
+96 : 0
+97 : 0
+98 : 0
+99 : 0
+100 : 0
+DB path: [rocksdbtest/dbbench]
+0	99	451001	0	0	0	0	0	
+50	76	12149939	0	0	0	0	19	
+100	58	21127897	0	0	0	0	43	
+150	49	28893904	0	0	0	0	77	
+200	49	36454808	0	0	0	0	119	
+250	32	43869641	0	0	0	0	145	
+300	32	50531888	0	0	1120	11581	187	
+350	30	56921627	0	0	3372	29676	225	
+400	30	62819652	0	0	6245	50222	263	
+450	29	67923498	0	0	9741	71664	298	
+500	31	72261165	0	0	14723	101774	333	
+550	31	76979443	0	0	19017	128661	368	
+600	33	82380618	0	0	22384	151386	405	
+650	28	86975563	0	0	26531	178214	436	
+700	33	90476143	0	0	32549	211155	471	
+750	29	94585263	0	0	37879	242207	499	
+800	29	97186126	0	0	45187	275335	525	
+850	29	100902610	0	0	50864	308825	556	
+900	29	104461703	0	0	56795	338522	585	
+950	27	108163058	0	0	62969	372499	613	
+1000	30	110619404	0	0	70121	408889	643	
+1050	30	113149498	0	0	77849	448978	669	
+1100	30	115748719	0	0	85705	486036	695	
+1150	29	118046708	0	0	94255	528269	719	
+1200	28	120411955	0	0	102508	565594	742	
+1250	30	122826860	0	0	111233	609230	768	
+1300	30	124782378	0	0	119640	650951	792	
+fillrandom   :      10.556 micros/op 94733 ops/sec 1328.249 seconds 125829120 operations;   96.8 MB/s
+Microseconds per write:
+Count: 125829120 Average: 10.5560  StdDev: 4723.97
+Min: 0  Median: 0.7164  Max: 10856951
+Percentiles: P50: 0.72 P75: 1.23 P99: 5.48 P99.9: 1940.28 P99.99: 4590.43
+------------------------------------------------------
+[       0,       1 ] 87820488  69.793%  69.793% ##############
+(       1,       2 ] 28306056  22.496%  92.289% ####
+(       2,       3 ]  4801874   3.816%  96.105% #
+(       3,       4 ]  2459759   1.955%  98.060% 
+(       4,       6 ]  1596557   1.269%  99.329% 
+(       6,      10 ]   421474   0.335%  99.664% 
+(      10,      15 ]    81511   0.065%  99.729% 
+(      15,      22 ]    22254   0.018%  99.746% 
+(      22,      34 ]    12264   0.010%  99.756% 
+(      34,      51 ]     4543   0.004%  99.760% 
+(      51,      76 ]     3236   0.003%  99.762% 
+(      76,     110 ]     2950   0.002%  99.765% 
+(     110,     170 ]     1997   0.002%  99.766% 
+(     170,     250 ]     1023   0.001%  99.767% 
+(     250,     380 ]      670   0.001%  99.768% 
+(     380,     580 ]     6874   0.005%  99.773% 
+(     580,     870 ]    24806   0.020%  99.793% 
+(     870,    1300 ]   116330   0.092%  99.885% 
+(    1300,    1900 ]    15141   0.012%  99.897% 
+(    1900,    2900 ]    86489   0.069%  99.966% 
+(    2900,    4400 ]    29223   0.023%  99.989% 
+(    4400,    6600 ]    11762   0.009%  99.999% 
+(    6600,    9900 ]     1337   0.001% 100.000% 
+(    9900,   14000 ]      205   0.000% 100.000% 
+(   14000,   22000 ]       55   0.000% 100.000% 
+(   22000,   33000 ]        5   0.000% 100.000% 
+(   33000,   50000 ]        5   0.000% 100.000% 
+(   50000,   75000 ]        4   0.000% 100.000% 
+(   75000,  110000 ]        3   0.000% 100.000% 
+(  110000,  170000 ]        4   0.000% 100.000% 
+(  170000,  250000 ]        6   0.000% 100.000% 
+(  250000,  380000 ]        5   0.000% 100.000% 
+(  380000,  570000 ]       17   0.000% 100.000% 
+(  570000,  860000 ]       22   0.000% 100.000% 
+(  860000, 1200000 ]       14   0.000% 100.000% 
+( 1200000, 1900000 ]       33   0.000% 100.000% 
+( 1900000, 2900000 ]       37   0.000% 100.000% 
+( 2900000, 4300000 ]       45   0.000% 100.000% 
+( 4300000, 6500000 ]       25   0.000% 100.000% 
+( 6500000, 9800000 ]       15   0.000% 100.000% 
+( 9800000, 14000000 ]        2   0.000% 100.000% 
+
+DB path: [rocksdbtest/dbbench]
+1350	27	125844667	3381	594	127738	689343	813	
+1400	28	125918788	19239	3341	136263	728012	834	
+1450	29	125987543	33961	5961	145355	769188	855	
+1500	30	126221128	83359	14667	151116	795931	872	
+1550	29	126842061	215656	37768	151767	798762	875	
+1600	29	127559677	368148	64746	152796	803336	878	
+1650	27	128228027	509898	90145	153241	805194	880	
+1700	28	128898627	652440	115324	154803	811700	886	
+1750	27	129618578	805057	142544	154921	812229	888	
+1800	27	130268360	942512	166999	156365	818461	893	
+1850	27	130949431	1086914	192399	157541	823473	897	
+1900	30	131529760	1210081	214296	160731	836676	907	
+1950	30	132316265	1377017	243792	160821	837256	909	
+2000	28	133000679	1522908	269262	161955	842134	912	
+2050	28	133663876	1663366	294150	163961	850466	918	
+2100	29	134392208	1817788	321424	165291	856044	923	
+2150	28	135122692	1973317	349014	165607	857586	926	
+2200	30	135742961	2104937	372359	169002	869804	935	
+2250	32	136386275	2241347	396685	171673	883184	943	
+2300	29	137167788	2407677	425737	172100	885227	944	
+2350	29	137904217	2564152	453286	173223	890500	948	
+2400	28	138616617	2715608	480175	174563	896012	953	
+2450	31	139258829	2851734	504333	177000	906406	962	
+2500	30	140026810	3015121	532821	178066	910253	964	
+2550	28	140764839	3171546	560433	178814	913732	968	
+2600	27	141509673	3329801	588405	179737	917855	972	
+2650	29	142179124	3472167	614096	182258	927814	979	
+2700	29	142759089	3595608	635772	185496	941691	985	
+2750	29	143487168	3750594	663053	187037	948598	991	
+2800	29	144102179	3880619	686246	189975	960132	997	
+2850	27	144850284	4039307	714233	191134	965165	1001	
+2900	28	145598473	4198385	742230	192381	970171	1005	
+2950	28	146193984	4324695	764451	195414	982268	1012	
+3000	28	146897430	4474514	790926	197498	990642	1017	
+3050	28	147479852	4598251	812971	200293	1002019	1024	
+3100	28	148184808	4747933	839715	202221	1008802	1028	
+3150	30	148738241	4865458	860331	206559	1027573	1038	
+3200	30	149467241	5020550	887695	208145	1034170	1043	
+3250	30	150150903	5165906	913286	210510	1044212	1049	
+3300	31	150886429	5321618	940893	211916	1050065	1055	
+3350	29	151613231	5475884	968079	213643	1057196	1058	
+3400	28	152313146	5624146	994274	215325	1064394	1062	
+3450	29	152960790	5761890	1018493	218035	1075794	1070	
+3500	28	153759403	5932107	1048713	218188	1076055	1072	
+3550	28	154375737	6062758	1072039	221167	1088825	1079	
+3600	28	155110247	6218844	1099416	222307	1094034	1085	
+3650	28	155882384	6382837	1128363	223268	1098048	1088	
+3700	27	156421976	6497281	1148677	227486	1114861	1095	
+3750	28	157050292	6630659	1172273	230235	1125928	1102	
+3800	27	157760105	6781482	1199106	231941	1132914	1107	
+3850	29	158478380	6933879	1226180	234418	1143274	1114	
+3900	29	159084005	7062693	1248730	237637	1155999	1121	
+3950	28	159881721	7231533	1278590	238230	1158524	1124	
+4000	30	160528227	7368221	1302601	241791	1172609	1132	
+4050	30	161325467	7537221	1332137	242719	1177038	1137	
+4100	30	162050721	7692521	1359512	244457	1184190	1143	
+4150	29	162770796	7845588	1386798	246400	1191884	1148	
+4200	31	163478837	7995392	1413400	248733	1201850	1155	
+4250	28	164145839	8137384	1438536	251781	1214442	1159	
+4300	30	164813523	8279809	1463743	254471	1225652	1166	
+4350	29	165562993	8439234	1491877	255642	1230786	1171	
+4400	28	166370081	8610815	1521998	256469	1234416	1175	
+4450	27	167104937	8766378	1549594	258830	1244289	1180	
+4500	28	167825640	8919374	1576335	260563	1251407	1186	
+4550	30	168538015	9071236	1602985	263095	1262032	1194	
+4600	28	169299951	9232631	1631835	264531	1265703	1198	
+4650	29	169948570	9370497	1655692	267650	1280594	1205	
+4700	30	170728574	9536694	1685013	269119	1287118	1211	
+4750	29	171436275	9686845	1711729	272043	1299254	1218	
+4800	30	172197765	9849164	1740364	273524	1305586	1223	
+4850	29	173000189	10020977	1770449	274127	1308343	1227	
+4900	29	173592041	10147396	1792850	278161	1325234	1236	
+4950	30	174345079	10307895	1820998	280222	1333659	1241	
+5000	28	175139571	10476445	1850734	281163	1337568	1244	
+5050	28	175704461	10596575	1872157	285424	1353212	1252	
+5100	29	176353402	10734689	1896415	288631	1368301	1259	
+5150	27	177127783	10899273	1925374	289608	1372421	1263	
+5200	29	177814525	11045393	1951008	292673	1384559	1270	
+5250	29	178460837	11183022	1975102	295578	1396677	1277	
+5300	30	179118626	11322460	1999760	298946	1410315	1285	
+5350	28	179974424	11504325	2031816	299608	1411627	1287	
+5400	28	180665534	11651644	2057761	302283	1424022	1293	
+5450	29	181291636	11784286	2081209	305787	1438905	1302	
+5500	29	181979640	11931214	2107074	309601	1454577	1308	
+5550	29	182620518	12067550	2131140	312720	1467207	1315	
+5600	29	183357475	12224151	2158796	314883	1475991	1320	
+5650	29	183947026	12349070	2180702	318929	1492293	1328	
+5700	29	184667077	12502107	2208080	321201	1501833	1333	
+5750	28	185389948	12655747	2235382	323318	1510767	1337	
+5800	27	185830332	12749319	2251898	329429	1534469	1345	
+5850	28	186403109	12871066	2273348	333852	1553765	1354	
+5900	28	187198538	13039784	2303178	334610	1556813	1358	
+5950	30	187788351	13164890	2325490	338414	1572108	1367	
+6000	29	188498974	13315570	2352113	340978	1582155	1372	
+6050	28	189262398	13477948	2380535	342106	1586554	1376	
+6100	28	189992572	13633478	2407603	344081	1594765	1382	
+6150	27	190719724	13787949	2434720	345955	1602798	1387	
+6200	27	191499702	13953706	2464226	347001	1607310	1391	
+6250	29	192038664	14068068	2484324	351751	1627162	1402	
+6300	27	192790060	14227228	2512447	354533	1638208	1406	
+6350	28	193475880	14372428	2538140	356872	1647748	1412	
+6400	29	194120139	14509195	2562365	360223	1661616	1420	
+6450	29	194909285	14677180	2591684	361470	1667050	1425	
+6500	28	195491654	14800926	2613675	365388	1683177	1432	
+6550	29	196222092	14956137	2641120	368031	1693246	1438	
+6600	29	197004269	15121804	2670549	369021	1698270	1443	
+6650	30	197578697	15244455	2692089	373962	1718730	1453	
+6700	30	198367350	15410921	2721776	375561	1723720	1458	
+6750	30	199022279	15550082	2746232	378781	1738588	1465	
+6800	28	199813383	15717881	2775703	380255	1744714	1469	
+6850	28	200559459	15876551	2803459	382374	1753934	1474	
+6900	30	201264721	16026371	2829830	384910	1764723	1482	
+6950	28	202051232	16193666	2859503	386427	1771068	1486	
+7000	29	202744461	16340556	2885437	389483	1783936	1494	
+7050	29	203419585	16484597	2910674	392719	1797548	1500	
+7100	29	204132428	16636452	2937568	395654	1809527	1507	
+7150	30	204870845	16793252	2965469	398124	1819623	1514	
+7200	30	205515287	16929496	2989668	401633	1833615	1520	
+7250	28	206192568	17073528	3015252	404772	1847063	1526	
+7300	29	206940902	17233057	3043454	407424	1858279	1532	
+7350	30	207444210	17339963	3062280	412782	1880228	1542	
+7400	30	208240070	17509541	3092304	414171	1886178	1547	
+7450	28	208897680	17649598	3116989	417662	1901073	1552	
+7500	28	209646923	17809037	3144947	419821	1909946	1558	
+7550	28	210483895	17987987	3176143	420685	1913976	1563	
+7600	30	211288685	18158919	3206604	422697	1922747	1571	
+7650	26	212187295	18349892	3240231	422755	1923231	1573	
+7700	28	212907737	18502686	3267247	426111	1937305	1580	
+7750	30	213582259	18646396	3292596	429129	1950380	1589	
+7800	29	214397421	18819559	3323176	430791	1957398	1594	
+7850	28	215187001	18987206	3352593	432533	1964609	1599	
+7900	27	215980478	19156476	3382510	434577	1973200	1603	
+7950	29	216522822	19272386	3402878	439797	1995392	1614	
+8000	29	217315175	19441216	3433008	441977	2004558	1620	
+8050	29	218049188	19597452	3460501	445087	2018095	1626	
+8100	28	218618043	19718134	3481818	450245	2039106	1635	
+8150	29	219364354	19875767	3509826	452940	2050126	1641	
+8200	28	220052012	20022125	3535616	455659	2061535	1647	
+8250	27	220742977	20168672	3561418	459093	2075775	1653	
+8300	28	221419340	20312525	3586680	462994	2091571	1661	
+8350	28	222011006	20438428	3609094	467042	2109090	1668	
+8400	28	222701003	20585514	3635232	469930	2121304	1674	
+8450	28	223437040	20741567	3662701	472913	2133807	1681	
+8500	29	224102294	20882345	3687647	476966	2149893	1689	
+8550	31	224556715	20977915	3704580	483559	2176592	1699	
+8600	30	225280886	21132466	3731794	485870	2186164	1705	
+8650	28	226053676	21297071	3761114	487286	2191695	1709	
+mixgraph     :      58.475 micros/op 17101 ops/sec 7357.888 seconds 125829120 operations;  262.4 MB/s ( Gets:21390276 Puts:100661446 Seek:3777398, reads 15910062 in 25167674 found, avg size: 546.0 value, 570.0 scan)
+ PERF_CONTEXT:
+user_key_comparison_count = 8715630326, block_cache_hit_count = 20161982, block_read_count = 634052890, block_read_byte = 1499601460597, block_read_time = 0, block_cache_index_hit_count = 0, index_block_read_count = 0, block_cache_filter_hit_count = 0, filter_block_read_count = 0, compression_dict_block_read_count = 0, secondary_cache_hit_count = 0, block_checksum_time = 0, block_decompress_time = 0, get_read_bytes = 13846280192, multiget_read_bytes = 0, iter_read_bytes = 2014003662438, internal_key_skipped_count = 2363038697, internal_delete_skipped_count = 0, internal_recent_skipped_count = 0, internal_merge_count = 0, write_wal_time = 0, get_snapshot_time = 0, get_from_memtable_time = 0, get_from_memtable_count = 21769060, get_post_process_time = 0, get_from_output_files_time = 0, seek_on_memtable_time = 0, seek_on_memtable_count = 3844554, next_on_memtable_count = 1208466, prev_on_memtable_count = 0, seek_child_seek_time = 0, seek_child_seek_count = 24925582, seek_min_heap_time = 0, seek_internal_seek_time = 0, find_next_user_entry_time = 0, write_pre_and_post_process_time = 0, write_memtable_time = 0, write_thread_wait_nanos = 0, write_scheduling_flushes_compactions_time = 0, db_mutex_lock_nanos = 0, db_condition_wait_nanos = 0, merge_operator_time_nanos = 0, write_delay_time = 0, read_index_block_nanos = 0, read_filter_block_nanos = 0, new_table_block_iter_nanos = 0, new_table_iterator_nanos = 0, block_seek_nanos = 0, find_table_nanos = 0, bloom_memtable_hit_count = 0, bloom_memtable_miss_count = 0, bloom_sst_hit_count = 0, bloom_sst_miss_count = 0, key_lock_wait_time = 0, key_lock_wait_count = 0, env_new_sequential_file_nanos = 0, env_new_random_access_file_nanos = 0, env_new_writable_file_nanos = 0, env_reuse_writable_file_nanos = 0, env_new_random_rw_file_nanos = 0, env_new_directory_nanos = 0, env_file_exists_nanos = 0, env_get_children_nanos = 0, env_get_children_file_attributes_nanos = 0, env_delete_file_nanos = 0, env_create_dir_nanos = 0, env_create_dir_if_missing_nanos = 0, env_delete_dir_nanos = 0, env_get_file_size_nanos = 0, env_get_file_modification_time_nanos = 0, env_rename_file_nanos = 0, env_link_file_nanos = 0, env_lock_file_nanos = 0, env_unlock_file_nanos = 0, env_new_logger_nanos = 0, get_cpu_nanos = 0, iter_next_cpu_nanos = 0, iter_prev_cpu_nanos = 0, iter_seek_cpu_nanos = 0, number_async_seek = 0, bloom_filter_useful = 0@level0, 0@level1, 0@level2, 0@level3, 0@level4, bloom_filter_full_positive = 0@level0, 0@level1, 0@level2, 0@level3, 0@level4, bloom_filter_full_true_positive = 0@level0, 0@level1, 0@level2, 0@level3, 0@level4, block_cache_hit_count = 6336923@level0, 1852950@level1, 1680283@level2, 10291826@level3, 0@level4, block_cache_miss_count = 34564121@level0, 21589699@level1, 66156548@level2, 511742522@level3, 0@level4
+Microseconds per write:
+Count: 100661446 Average: 4.7059  StdDev: 2951.15
+Min: 0  Median: 1.5250  Max: 10028382
+Percentiles: P50: 1.53 P75: 2.03 P99: 5.71 P99.9: 13.72 P99.99: 818.29
+------------------------------------------------------
+[       0,       1 ] 23097746  22.946%  22.946% #####
+(       1,       2 ] 51870427  51.530%  74.476% ##########
+(       2,       3 ] 18458838  18.338%  92.813% ####
+(       3,       4 ]  4504496   4.475%  97.288% #
+(       4,       6 ]  2011907   1.999%  99.287% 
+(       6,      10 ]   570230   0.566%  99.853% 
+(      10,      15 ]    63308   0.063%  99.916% 
+(      15,      22 ]    16763   0.017%  99.933% 
+(      22,      34 ]     4340   0.004%  99.937% 
+(      34,      51 ]      893   0.001%  99.938% 
+(      51,      76 ]      564   0.001%  99.938% 
+(      76,     110 ]     1237   0.001%  99.940% 
+(     110,     170 ]      812   0.001%  99.941% 
+(     170,     250 ]      355   0.000%  99.941% 
+(     250,     380 ]      195   0.000%  99.941% 
+(     380,     580 ]    15756   0.016%  99.957% 
+(     580,     870 ]    40785   0.041%  99.997% 
+(     870,    1300 ]      793   0.001%  99.998% 
+(    1300,    1900 ]     1140   0.001%  99.999% 
+(    1900,    2900 ]      324   0.000%  99.999% 
+(    2900,    4400 ]      336   0.000% 100.000% 
+(    4400,    6600 ]       97   0.000% 100.000% 
+(    6600,    9900 ]       20   0.000% 100.000% 
+(   75000,  110000 ]        1   0.000% 100.000% 
+(  250000,  380000 ]        6   0.000% 100.000% 
+(  380000,  570000 ]        4   0.000% 100.000% 
+(  570000,  860000 ]        6   0.000% 100.000% 
+(  860000, 1200000 ]       10   0.000% 100.000% 
+( 1200000, 1900000 ]       13   0.000% 100.000% 
+( 1900000, 2900000 ]       11   0.000% 100.000% 
+( 2900000, 4300000 ]       17   0.000% 100.000% 
+( 4300000, 6500000 ]       13   0.000% 100.000% 
+( 6500000, 9800000 ]        2   0.000% 100.000% 
+( 9800000, 14000000 ]        1   0.000% 100.000% 
+
+Microseconds per read:
+Count: 21390276 Average: 167.5144  StdDev: 9217.96
+Min: 1  Median: 127.0724  Max: 17192702
+Percentiles: P50: 127.07 P75: 212.19 P99: 578.72 P99.9: 1141.96 P99.99: 2204.49
+------------------------------------------------------
+[       0,       1 ]        1   0.000%   0.000% 
+(       1,       2 ]        3   0.000%   0.000% 
+(       2,       3 ]       18   0.000%   0.000% 
+(       3,       4 ]       70   0.000%   0.000% 
+(       4,       6 ]     1782   0.008%   0.009% 
+(       6,      10 ]    42080   0.197%   0.205% 
+(      10,      15 ]   258316   1.208%   1.413% 
+(      15,      22 ]  1484096   6.938%   8.351% #
+(      22,      34 ]  3357064  15.694%  24.046% ###
+(      34,      51 ]   494917   2.314%  26.359% 
+(      51,      76 ]    61549   0.288%  26.647% 
+(      76,     110 ]  3862473  18.057%  44.704% ####
+(     110,     170 ]  3981058  18.612%  63.316% ####
+(     170,     250 ]  4739488  22.157%  85.473% ####
+(     250,     380 ]  2301179  10.758%  96.231% ##
+(     380,     580 ]   596104   2.787%  99.018% #
+(     580,     870 ]   165218   0.772%  99.790% 
+(     870,    1300 ]    37109   0.173%  99.964% 
+(    1300,    1900 ]     5112   0.024%  99.988% 
+(    1900,    2900 ]     1642   0.008%  99.995% 
+(    2900,    4400 ]      689   0.003%  99.999% 
+(    4400,    6600 ]       31   0.000%  99.999% 
+(    6600,    9900 ]        4   0.000%  99.999% 
+(   22000,   33000 ]        1   0.000%  99.999% 
+(   33000,   50000 ]       21   0.000%  99.999% 
+(   50000,   75000 ]       75   0.000%  99.999% 
+(   75000,  110000 ]        5   0.000%  99.999% 
+(  250000,  380000 ]        5   0.000%  99.999% 
+(  380000,  570000 ]        4   0.000%  99.999% 
+(  570000,  860000 ]        9   0.000%  99.999% 
+(  860000, 1200000 ]       13   0.000%  99.999% 
+( 1200000, 1900000 ]       35   0.000% 100.000% 
+( 1900000, 2900000 ]       50   0.000% 100.000% 
+( 2900000, 4300000 ]       29   0.000% 100.000% 
+( 4300000, 6500000 ]       21   0.000% 100.000% 
+( 6500000, 9800000 ]        4   0.000% 100.000% 
+( 14000000, 22000000 ]        1   0.000% 100.000% 
+
+Microseconds per seek:
+Count: 3777398 Average: 873.8847  StdDev: 22356.66
+Min: 7  Median: 294.0067  Max: 13041797
+Percentiles: P50: 294.01 P75: 670.19 P99: 6589.83 P99.9: 10937.97 P99.99: 20284.05
+------------------------------------------------------
+(       6,      10 ]       18   0.000%   0.000% 
+(      10,      15 ]      552   0.015%   0.015% 
+(      15,      22 ]     7362   0.195%   0.210% 
+(      22,      34 ]    71986   1.906%   2.116% 
+(      34,      51 ]   160583   4.251%   6.367% #
+(      51,      76 ]    91303   2.417%   8.784% 
+(      76,     110 ]   159596   4.225%  13.009% #
+(     110,     170 ]   539314  14.277%  27.286% ###
+(     170,     250 ]   640635  16.960%  44.246% ###
+(     250,     380 ]   642073  16.998%  61.244% ###
+(     380,     580 ]   432554  11.451%  72.695% ##
+(     580,     870 ]   279977   7.412%  80.107% #
+(     870,    1300 ]   234354   6.204%  86.311% #
+(    1300,    1900 ]   154184   4.082%  90.393% #
+(    1900,    2900 ]   124676   3.301%  93.693% #
+(    2900,    4400 ]   106411   2.817%  96.510% #
+(    4400,    6600 ]    94483   2.501%  99.012% #
+(    6600,    9900 ]    32531   0.861%  99.873% 
+(    9900,   14000 ]     4063   0.108%  99.980% 
+(   14000,   22000 ]      465   0.012%  99.993% 
+(   22000,   33000 ]       20   0.001%  99.993% 
+(   33000,   50000 ]       13   0.000%  99.994% 
+(   50000,   75000 ]       43   0.001%  99.995% 
+(   75000,  110000 ]        4   0.000%  99.995% 
+(  110000,  170000 ]        6   0.000%  99.995% 
+(  170000,  250000 ]        3   0.000%  99.995% 
+(  250000,  380000 ]        5   0.000%  99.995% 
+(  380000,  570000 ]        9   0.000%  99.995% 
+(  570000,  860000 ]       12   0.000%  99.996% 
+(  860000, 1200000 ]       16   0.000%  99.996% 
+( 1200000, 1900000 ]       39   0.001%  99.997% 
+( 1900000, 2900000 ]       48   0.001%  99.998% 
+( 2900000, 4300000 ]       33   0.001%  99.999% 
+( 4300000, 6500000 ]       20   0.001% 100.000% 
+( 6500000, 9800000 ]        6   0.000% 100.000% 
+( 9800000, 14000000 ]        1   0.000% 100.000% 
+
+STATISTICS:
+rocksdb.block.cache.miss COUNT : 1145039327
+rocksdb.block.cache.hit COUNT : 23228608
+rocksdb.block.cache.add COUNT : 634052890
+rocksdb.block.cache.add.failures COUNT : 0
+rocksdb.block.cache.index.miss COUNT : 0
+rocksdb.block.cache.index.hit COUNT : 0
+rocksdb.block.cache.index.add COUNT : 0
+rocksdb.block.cache.index.bytes.insert COUNT : 0
+rocksdb.block.cache.index.bytes.evict COUNT : 0
+rocksdb.block.cache.filter.miss COUNT : 0
+rocksdb.block.cache.filter.hit COUNT : 0
+rocksdb.block.cache.filter.add COUNT : 0
+rocksdb.block.cache.filter.bytes.insert COUNT : 0
+rocksdb.block.cache.filter.bytes.evict COUNT : 0
+rocksdb.block.cache.data.miss COUNT : 1145039327
+rocksdb.block.cache.data.hit COUNT : 23228608
+rocksdb.block.cache.data.add COUNT : 634052890
+rocksdb.block.cache.data.bytes.insert COUNT : 2710748777600
+rocksdb.block.cache.bytes.read COUNT : 97856609744
+rocksdb.block.cache.bytes.write COUNT : 2710748777600
+rocksdb.bloom.filter.useful COUNT : 0
+rocksdb.bloom.filter.full.positive COUNT : 0
+rocksdb.bloom.filter.full.true.positive COUNT : 0
+rocksdb.bloom.filter.micros COUNT : 0
+rocksdb.persistent.cache.hit COUNT : 0
+rocksdb.persistent.cache.miss COUNT : 0
+rocksdb.sim.block.cache.hit COUNT : 0
+rocksdb.sim.block.cache.miss COUNT : 0
+rocksdb.memtable.hit COUNT : 3
+rocksdb.memtable.miss COUNT : 21390273
+rocksdb.l0.hit COUNT : 145
+rocksdb.l1.hit COUNT : 1267
+rocksdb.l2andup.hit COUNT : 13520343
+rocksdb.compaction.key.drop.new COUNT : 90397865
+rocksdb.compaction.key.drop.obsolete COUNT : 0
+rocksdb.compaction.key.drop.range_del COUNT : 0
+rocksdb.compaction.key.drop.user COUNT : 0
+rocksdb.compaction.range_del.drop.obsolete COUNT : 0
+rocksdb.compaction.optimized.del.drop.obsolete COUNT : 0
+rocksdb.compaction.cancelled COUNT : 0
+rocksdb.number.keys.written COUNT : 226490566
+rocksdb.number.keys.read COUNT : 21390276
+rocksdb.number.keys.updated COUNT : 0
+rocksdb.bytes.written COUNT : 198307690864
+rocksdb.bytes.read COUNT : 13846280192
+rocksdb.number.db.seek COUNT : 3777398
+rocksdb.number.db.next COUNT : 2152996738
+rocksdb.number.db.prev COUNT : 0
+rocksdb.number.db.seek.found COUNT : 3777398
+rocksdb.number.db.next.found COUNT : 2152996738
+rocksdb.number.db.prev.found COUNT : 0
+rocksdb.db.iter.bytes.read COUNT : 2014003662438
+rocksdb.no.file.closes COUNT : 0
+rocksdb.no.file.opens COUNT : 23619
+rocksdb.no.file.errors COUNT : 0
+rocksdb.l0.slowdown.micros COUNT : 0
+rocksdb.memtable.compaction.micros COUNT : 0
+rocksdb.l0.num.files.stall.micros COUNT : 0
+rocksdb.stall.micros COUNT : 461293938
+rocksdb.db.mutex.wait.micros COUNT : 0
+rocksdb.rate.limit.delay.millis COUNT : 0
+rocksdb.num.iterators COUNT : 0
+rocksdb.number.multiget.get COUNT : 0
+rocksdb.number.multiget.keys.read COUNT : 0
+rocksdb.number.multiget.bytes.read COUNT : 0
+rocksdb.number.deletes.filtered COUNT : 0
+rocksdb.number.merge.failures COUNT : 0
+rocksdb.bloom.filter.prefix.checked COUNT : 0
+rocksdb.bloom.filter.prefix.useful COUNT : 0
+rocksdb.number.reseeks.iteration COUNT : 0
+rocksdb.getupdatessince.calls COUNT : 0
+rocksdb.block.cachecompressed.miss COUNT : 0
+rocksdb.block.cachecompressed.hit COUNT : 0
+rocksdb.block.cachecompressed.add COUNT : 0
+rocksdb.block.cachecompressed.add.failures COUNT : 0
+rocksdb.wal.synced COUNT : 0
+rocksdb.wal.bytes COUNT : 198307690864
+rocksdb.write.self COUNT : 226490566
+rocksdb.write.other COUNT : 0
+rocksdb.write.timeout COUNT : 0
+rocksdb.write.wal COUNT : 226490566
+rocksdb.compact.read.bytes COUNT : 1228301818843
+rocksdb.compact.write.bytes COUNT : 1187885016371
+rocksdb.flush.write.bytes COUNT : 112235164105
+rocksdb.compact.read.marked.bytes COUNT : 0
+rocksdb.compact.read.periodic.bytes COUNT : 0
+rocksdb.compact.read.ttl.bytes COUNT : 0
+rocksdb.compact.write.marked.bytes COUNT : 0
+rocksdb.compact.write.periodic.bytes COUNT : 0
+rocksdb.compact.write.ttl.bytes COUNT : 0
+rocksdb.number.direct.load.table.properties COUNT : 0
+rocksdb.number.superversion_acquires COUNT : 3780
+rocksdb.number.superversion_releases COUNT : 1268
+rocksdb.number.superversion_cleanups COUNT : 1263
+rocksdb.number.block.compressed COUNT : 541026539
+rocksdb.number.block.decompressed COUNT : 1145062904
+rocksdb.number.block.not_compressed COUNT : 42
+rocksdb.merge.operation.time.nanos COUNT : 0
+rocksdb.filter.operation.time.nanos COUNT : 0
+rocksdb.row.cache.hit COUNT : 0
+rocksdb.row.cache.miss COUNT : 0
+rocksdb.read.amp.estimate.useful.bytes COUNT : 0
+rocksdb.read.amp.total.read.bytes COUNT : 0
+rocksdb.number.rate_limiter.drains COUNT : 0
+rocksdb.number.iter.skip COUNT : 210041959
+rocksdb.blobdb.num.put COUNT : 0
+rocksdb.blobdb.num.write COUNT : 0
+rocksdb.blobdb.num.get COUNT : 0
+rocksdb.blobdb.num.multiget COUNT : 0
+rocksdb.blobdb.num.seek COUNT : 0
+rocksdb.blobdb.num.next COUNT : 0
+rocksdb.blobdb.num.prev COUNT : 0
+rocksdb.blobdb.num.keys.written COUNT : 0
+rocksdb.blobdb.num.keys.read COUNT : 0
+rocksdb.blobdb.bytes.written COUNT : 0
+rocksdb.blobdb.bytes.read COUNT : 0
+rocksdb.blobdb.write.inlined COUNT : 0
+rocksdb.blobdb.write.inlined.ttl COUNT : 0
+rocksdb.blobdb.write.blob COUNT : 0
+rocksdb.blobdb.write.blob.ttl COUNT : 0
+rocksdb.blobdb.blob.file.bytes.written COUNT : 0
+rocksdb.blobdb.blob.file.bytes.read COUNT : 0
+rocksdb.blobdb.blob.file.synced COUNT : 0
+rocksdb.blobdb.blob.index.expired.count COUNT : 0
+rocksdb.blobdb.blob.index.expired.size COUNT : 0
+rocksdb.blobdb.blob.index.evicted.count COUNT : 0
+rocksdb.blobdb.blob.index.evicted.size COUNT : 0
+rocksdb.blobdb.gc.num.files COUNT : 0
+rocksdb.blobdb.gc.num.new.files COUNT : 0
+rocksdb.blobdb.gc.failures COUNT : 0
+rocksdb.blobdb.gc.num.keys.overwritten COUNT : 0
+rocksdb.blobdb.gc.num.keys.expired COUNT : 0
+rocksdb.blobdb.gc.num.keys.relocated COUNT : 0
+rocksdb.blobdb.gc.bytes.overwritten COUNT : 0
+rocksdb.blobdb.gc.bytes.expired COUNT : 0
+rocksdb.blobdb.gc.bytes.relocated COUNT : 0
+rocksdb.blobdb.fifo.num.files.evicted COUNT : 0
+rocksdb.blobdb.fifo.num.keys.evicted COUNT : 0
+rocksdb.blobdb.fifo.bytes.evicted COUNT : 0
+rocksdb.txn.overhead.mutex.prepare COUNT : 0
+rocksdb.txn.overhead.mutex.old.commit.map COUNT : 0
+rocksdb.txn.overhead.duplicate.key COUNT : 0
+rocksdb.txn.overhead.mutex.snapshot COUNT : 0
+rocksdb.txn.get.tryagain COUNT : 0
+rocksdb.number.multiget.keys.found COUNT : 0
+rocksdb.num.iterator.created COUNT : 3777398
+rocksdb.num.iterator.deleted COUNT : 3777398
+rocksdb.block.cache.compression.dict.miss COUNT : 0
+rocksdb.block.cache.compression.dict.hit COUNT : 0
+rocksdb.block.cache.compression.dict.add COUNT : 0
+rocksdb.block.cache.compression.dict.bytes.insert COUNT : 0
+rocksdb.block.cache.compression.dict.bytes.evict COUNT : 0
+rocksdb.block.cache.add.redundant COUNT : 0
+rocksdb.block.cache.index.add.redundant COUNT : 0
+rocksdb.block.cache.filter.add.redundant COUNT : 0
+rocksdb.block.cache.data.add.redundant COUNT : 0
+rocksdb.block.cache.compression.dict.add.redundant COUNT : 0
+rocksdb.files.marked.trash COUNT : 0
+rocksdb.files.deleted.immediately COUNT : 25595
+rocksdb.error.handler.bg.errro.count COUNT : 0
+rocksdb.error.handler.bg.io.errro.count COUNT : 0
+rocksdb.error.handler.bg.retryable.io.errro.count COUNT : 0
+rocksdb.error.handler.autoresume.count COUNT : 0
+rocksdb.error.handler.autoresume.retry.total.count COUNT : 0
+rocksdb.error.handler.autoresume.success.count COUNT : 0
+rocksdb.memtable.payload.bytes.at.flush COUNT : 196472359416
+rocksdb.memtable.garbage.bytes.at.flush COUNT : 64990509
+rocksdb.secondary.cache.hits COUNT : 0
+rocksdb.verify_checksum.read.bytes COUNT : 0
+rocksdb.backup.read.bytes COUNT : 0
+rocksdb.backup.write.bytes COUNT : 0
+rocksdb.remote.compact.read.bytes COUNT : 0
+rocksdb.remote.compact.write.bytes COUNT : 0
+rocksdb.hot.file.read.bytes COUNT : 0
+rocksdb.warm.file.read.bytes COUNT : 0
+rocksdb.cold.file.read.bytes COUNT : 0
+rocksdb.hot.file.read.count COUNT : 0
+rocksdb.warm.file.read.count COUNT : 0
+rocksdb.cold.file.read.count COUNT : 0
+rocksdb.last.level.read.bytes COUNT : 0
+rocksdb.last.level.read.count COUNT : 0
+rocksdb.non.last.level.read.bytes COUNT : 2729754133308
+rocksdb.non.last.level.read.count COUNT : 1145133803
+rocksdb.block.checksum.compute.count COUNT : 1145086565
+rocksdb.multiget.coroutine.count COUNT : 0
+rocksdb.db.get.micros P50 : 126.578494 P95 : 364.990568 P99 : 578.595910 P100 : 17192701.000000 COUNT : 21390276 SUM : 3578562131
+rocksdb.db.write.micros P50 : 0.831628 P95 : 2.766275 P99 : 4.866513 P100 : 10856949.000000 COUNT : 226490566 SUM : 1749374788
+rocksdb.compaction.times.micros P50 : 1497683.755405 P95 : 2814534.075104 P99 : 3528414.000000 P100 : 3528414.000000 COUNT : 3529 SUM : 5356784235
+rocksdb.compaction.times.cpu_micros P50 : 770095.729013 P95 : 1741222.222222 P99 : 5617750.000000 P100 : 5629080.000000 COUNT : 3529 SUM : 3121514252
+rocksdb.subcompaction.setup.times.micros P50 : 144.431818 P95 : 1144.125000 P99 : 1861.428571 P100 : 3578.000000 COUNT : 345 SUM : 110808
+rocksdb.table.sync.micros P50 : 69392.857143 P95 : 165752.212389 P99 : 231714.285714 P100 : 363730.000000 COUNT : 3020 SUM : 245174661
+rocksdb.compaction.outfile.sync.micros P50 : 104798.084929 P95 : 473679.328165 P99 : 554584.961240 P100 : 842056.000000 COUNT : 20599 SUM : 3214627807
+rocksdb.wal.file.sync.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.manifest.file.sync.micros P50 : 68.284157 P95 : 236.067511 P99 : 596.609091 P100 : 8092.000000 COUNT : 6911 SUM : 711747
+rocksdb.table.open.io.micros P50 : 1512.631976 P95 : 3557.319026 P99 : 5224.209945 P100 : 79452.000000 COUNT : 23619 SUM : 41690159
+rocksdb.db.multiget.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.read.block.compaction.micros P50 : 0.850872 P95 : 1.982505 P99 : 27.714940 P100 : 91931.000000 COUNT : 510986437 SUM : 1872324804
+rocksdb.read.block.get.micros P50 : 1.465488 P95 : 59.347508 P99 : 124.228329 P100 : 77867.000000 COUNT : 634076509 SUM : 4951327528
+rocksdb.write.raw.block.micros P50 : 0.501655 P95 : 0.953144 P99 : 0.993276 P100 : 1323.000000 COUNT : 541073819 SUM : 168940747
+rocksdb.l0.slowdown.count P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.memtable.compaction.count P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.num.files.stall.count P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.hard.rate.limit.delay.count P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.soft.rate.limit.delay.count P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.numfiles.in.singlecompaction P50 : 3.835073 P95 : 9.853759 P99 : 43.082857 P100 : 47.000000 COUNT : 4238 SUM : 23284
+rocksdb.db.seek.micros P50 : 147.018544 P95 : 373.508962 P99 : 631.633390 P100 : 69026.000000 COUNT : 3777398 SUM : 605207181
+rocksdb.db.write.stall P50 : 0.538557 P95 : 1088.003812 P99 : 2557.717905 P100 : 10856921.000000 COUNT : 2254439 SUM : 461360090
+rocksdb.sst.read.micros P50 : 0.551993 P95 : 1.954176 P99 : 107.127900 P100 : 91879.000000 COUNT : 1145133803 SUM : 5745768221
+rocksdb.num.subcompactions.scheduled P50 : 5.248649 P95 : 8.000000 P99 : 8.000000 P100 : 8.000000 COUNT : 345 SUM : 1927
+rocksdb.bytes.per.read P50 : 959.888208 P95 : 1024.000000 P99 : 1024.000000 P100 : 1024.000000 COUNT : 21390276 SUM : 13846280192
+rocksdb.bytes.per.write P50 : 914.239198 P95 : 1088.000000 P99 : 1088.000000 P100 : 1088.000000 COUNT : 226490566 SUM : 198307690864
+rocksdb.bytes.per.multiget P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.bytes.compressed P50 : 3662.325510 P95 : 4348.469055 P99 : 5244.566702 P100 : 630201.000000 COUNT : 541026539 SUM : 2292119194059
+rocksdb.bytes.decompressed P50 : 3690.815314 P95 : 4470.016376 P99 : 6174.701279 P100 : 630201.000000 COUNT : 1145062904 SUM : 4826741333074
+rocksdb.compression.times.nanos P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.decompression.times.nanos P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.read.num.merge_operands P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.key.size P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.value.size P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.write.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.get.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.multiget.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.seek.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.next.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.prev.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.blob.file.write.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.blob.file.read.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.blob.file.sync.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.gc.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.compression.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.decompression.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.db.flush.micros P50 : 151912.350598 P95 : 243802.242610 P99 : 342444.444444 P100 : 9394226.000000 COUNT : 3020 SUM : 491882977
+rocksdb.sst.batch.size P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.num.index.and.filter.blocks.read.per.level P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.num.data.blocks.read.per.level P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.num.sst.read.per.level P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.error.handler.autoresume.retry.count P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.async.read.bytes P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.poll.wait.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.prefetched.bytes.discarded P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 39088 SUM : 0
+rocksdb.multiget.io.batch.size P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.num.level.read.per.multiget P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+8685	29	226490566	21390276	3777398	489818	2202322	1714	
+GetTotalBytesWritten :: 2015518601216
+UserByteWritten : 1501906226218
+FAR STAT :: WA_zc (mb) : 489818
+@@~Zenfs Last Free percent freepercent 30 
+SEQUENCE OVER SEQ_DIST_MAX : 6002SEQUENCE OVER SEQ_DIST_MAX : 5527SEQUENCE OVER SEQ_DIST_MAX : 5517SEQUENCE OVER SEQ_DIST_MAX : 5589SEQUENCE OVER SEQ_DIST_MAX : 5177SEQUENCE OVER SEQ_DIST_MAX : 10370zone size at ~ 1077
+============================================================
+WWP (MB) : 1542264, R_wp : 16
+NEW WWP(MB) : 1542264
+Runtime zone reset R_wp 16
+ZONE FINISH VALID(MB) 0
+ZONE FINISH WWP(MB) : 0
+ZC IO Blocking time : 0
+============================================================
+[1] :: 254 ~ 254, 50 ms, 0 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[2] :: 254 ~ 255, 987 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[3] :: 255 ~ 256, 881 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[4] :: 256 ~ 257, 455 ms, 51 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[5] :: 271 ~ 272, 879 ms, 61 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[6] :: 273 ~ 274, 734 ms, 59 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[7] :: 275 ~ 275, 240 ms, 25 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[8] :: 280 ~ 281, 930 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[9] :: 286 ~ 287, 517 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[10] :: 287 ~ 287, 402 ms, 58 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[11] :: 287 ~ 287, 334 ms, 55 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[12] :: 288 ~ 288, 119 ms, 7 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[13] :: 288 ~ 288, 432 ms, 49 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[14] :: 289 ~ 289, 699 ms, 97 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[15] :: 289 ~ 290, 264 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[16] :: 290 ~ 291, 884 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[17] :: 291 ~ 292, 1345 ms, 117 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[18] :: 292 ~ 293, 304 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[19] :: 298 ~ 298, 358 ms, 21 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[20] :: 298 ~ 299, 767 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[21] :: 302 ~ 303, 248 ms, 30 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[22] :: 307 ~ 307, 136 ms, 6 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[23] :: 307 ~ 309, 1416 ms, 116 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[24] :: 309 ~ 309, 350 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[25] :: 310 ~ 311, 380 ms, 55 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[26] :: 311 ~ 312, 1064 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[27] :: 313 ~ 314, 693 ms, 75 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[28] :: 315 ~ 316, 846 ms, 116 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[29] :: 316 ~ 318, 1821 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[30] :: 318 ~ 319, 495 ms, 44 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[31] :: 319 ~ 319, 269 ms, 55 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[32] :: 323 ~ 324, 1149 ms, 167 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[33] :: 324 ~ 326, 1801 ms, 138 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[34] :: 326 ~ 326, 496 ms, 49 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[35] :: 326 ~ 327, 502 ms, 82 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[36] :: 327 ~ 327, 274 ms, 66 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[37] :: 327 ~ 328, 884 ms, 225 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[38] :: 329 ~ 329, 515 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[39] :: 337 ~ 337, 194 ms, 10 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[40] :: 339 ~ 340, 506 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[41] :: 340 ~ 341, 748 ms, 159 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[42] :: 345 ~ 345, 68 ms, 2 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[43] :: 345 ~ 345, 852 ms, 58 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[44] :: 345 ~ 347, 1123 ms, 114 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[45] :: 347 ~ 348, 455 ms, 52 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[46] :: 349 ~ 350, 586 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[47] :: 350 ~ 350, 224 ms, 41 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[48] :: 350 ~ 351, 596 ms, 132 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[49] :: 351 ~ 352, 981 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[50] :: 355 ~ 356, 827 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[51] :: 356 ~ 357, 1227 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[52] :: 357 ~ 357, 80 ms, 7 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[53] :: 363 ~ 363, 96 ms, 2 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[54] :: 363 ~ 364, 855 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[55] :: 364 ~ 365, 988 ms, 79 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[56] :: 365 ~ 366, 754 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[57] :: 366 ~ 367, 634 ms, 156 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[58] :: 367 ~ 367, 841 ms, 217 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[59] :: 368 ~ 370, 1346 ms, 254 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[60] :: 370 ~ 371, 952 ms, 257 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[61] :: 373 ~ 373, 716 ms, 129 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[62] :: 376 ~ 377, 1394 ms, 112 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[63] :: 377 ~ 378, 212 ms, 15 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[64] :: 382 ~ 383, 498 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[65] :: 383 ~ 383, 373 ms, 33 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[66] :: 386 ~ 387, 1436 ms, 120 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[67] :: 387 ~ 388, 555 ms, 48 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[68] :: 388 ~ 389, 738 ms, 90 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[69] :: 389 ~ 389, 541 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[70] :: 389 ~ 391, 1260 ms, 193 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[71] :: 391 ~ 391, 261 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[72] :: 391 ~ 391, 330 ms, 70 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[73] :: 392 ~ 393, 487 ms, 62 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[74] :: 398 ~ 399, 1307 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[75] :: 399 ~ 399, 261 ms, 55 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[76] :: 402 ~ 403, 1476 ms, 208 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[77] :: 403 ~ 404, 883 ms, 217 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[78] :: 404 ~ 405, 465 ms, 107 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[79] :: 406 ~ 406, 189 ms, 21 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[80] :: 407 ~ 408, 1008 ms, 202 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[81] :: 409 ~ 410, 1705 ms, 127 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[82] :: 410 ~ 411, 491 ms, 42 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[83] :: 411 ~ 412, 562 ms, 88 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[84] :: 413 ~ 414, 497 ms, 60 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[85] :: 414 ~ 414, 83 ms, 3 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[86] :: 415 ~ 417, 1477 ms, 273 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[87] :: 418 ~ 419, 1028 ms, 137 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[88] :: 419 ~ 419, 494 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[89] :: 419 ~ 419, 319 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[90] :: 424 ~ 425, 450 ms, 51 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[91] :: 425 ~ 425, 362 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[92] :: 425 ~ 426, 1072 ms, 145 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[93] :: 430 ~ 432, 2338 ms, 226 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[94] :: 432 ~ 433, 1208 ms, 296 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[95] :: 433 ~ 434, 1054 ms, 279 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[96] :: 435 ~ 435, 790 ms, 197 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[97] :: 435 ~ 436, 224 ms, 43 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[98] :: 437 ~ 438, 741 ms, 132 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[99] :: 439 ~ 439, 697 ms, 100 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[100] :: 447 ~ 447, 633 ms, 95 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[101] :: 448 ~ 450, 1196 ms, 177 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[102] :: 450 ~ 451, 1434 ms, 193 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[103] :: 451 ~ 452, 322 ms, 41 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[104] :: 452 ~ 452, 435 ms, 49 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[105] :: 453 ~ 455, 2008 ms, 382 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[106] :: 456 ~ 458, 2444 ms, 271 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[107] :: 458 ~ 459, 945 ms, 228 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[108] :: 459 ~ 460, 743 ms, 175 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[109] :: 466 ~ 467, 1163 ms, 117 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[110] :: 469 ~ 469, 400 ms, 47 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[111] :: 469 ~ 470, 549 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[112] :: 470 ~ 471, 1101 ms, 213 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[113] :: 471 ~ 472, 1368 ms, 366 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[114] :: 476 ~ 477, 789 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[115] :: 478 ~ 480, 2706 ms, 257 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[116] :: 480 ~ 481, 275 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[117] :: 481 ~ 482, 1433 ms, 355 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[118] :: 482 ~ 482, 257 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[119] :: 483 ~ 484, 989 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[120] :: 484 ~ 484, 741 ms, 114 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[121] :: 484 ~ 485, 456 ms, 111 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[122] :: 490 ~ 490, 69 ms, 2 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[123] :: 490 ~ 492, 1772 ms, 142 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[124] :: 492 ~ 493, 1434 ms, 319 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[125] :: 493 ~ 493, 281 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[126] :: 493 ~ 494, 291 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[127] :: 494 ~ 496, 2066 ms, 386 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[128] :: 496 ~ 498, 1597 ms, 215 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[129] :: 498 ~ 499, 1090 ms, 239 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[130] :: 499 ~ 500, 952 ms, 234 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[131] :: 503 ~ 504, 550 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[132] :: 504 ~ 504, 476 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[133] :: 506 ~ 507, 1693 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[134] :: 507 ~ 508, 579 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[135] :: 508 ~ 509, 896 ms, 219 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[136] :: 509 ~ 510, 1022 ms, 264 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[137] :: 510 ~ 512, 1942 ms, 368 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[138] :: 513 ~ 513, 493 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[139] :: 513 ~ 513, 398 ms, 54 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[140] :: 513 ~ 515, 1187 ms, 185 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[141] :: 515 ~ 515, 313 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[142] :: 521 ~ 522, 244 ms, 12 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[143] :: 522 ~ 523, 1069 ms, 87 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[144] :: 523 ~ 523, 467 ms, 87 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[145] :: 523 ~ 524, 515 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[146] :: 525 ~ 526, 1831 ms, 326 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[147] :: 532 ~ 532, 287 ms, 16 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[148] :: 532 ~ 534, 2039 ms, 203 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[149] :: 534 ~ 535, 533 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[150] :: 536 ~ 536, 759 ms, 107 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[151] :: 536 ~ 538, 1253 ms, 256 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[152] :: 541 ~ 542, 1169 ms, 172 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[153] :: 543 ~ 544, 792 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[154] :: 544 ~ 546, 2294 ms, 279 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[155] :: 546 ~ 546, 445 ms, 100 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[156] :: 546 ~ 548, 1176 ms, 306 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[157] :: 548 ~ 548, 496 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[158] :: 548 ~ 550, 1969 ms, 407 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[159] :: 555 ~ 556, 1085 ms, 197 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[160] :: 557 ~ 560, 2916 ms, 326 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[161] :: 560 ~ 560, 265 ms, 54 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[162] :: 560 ~ 560, 141 ms, 20 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[163] :: 560 ~ 561, 421 ms, 57 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[164] :: 567 ~ 567, 133 ms, 9 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[165] :: 568 ~ 568, 911 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[166] :: 568 ~ 570, 1307 ms, 119 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[167] :: 570 ~ 570, 574 ms, 114 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[168] :: 570 ~ 571, 885 ms, 220 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[169] :: 572 ~ 573, 1770 ms, 264 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[170] :: 573 ~ 574, 616 ms, 150 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[171] :: 574 ~ 575, 1199 ms, 294 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[172] :: 580 ~ 581, 117 ms, 6 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[173] :: 581 ~ 581, 505 ms, 31 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[174] :: 581 ~ 582, 836 ms, 65 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[175] :: 582 ~ 584, 1615 ms, 219 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[176] :: 584 ~ 584, 215 ms, 43 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[177] :: 584 ~ 585, 647 ms, 157 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[178] :: 585 ~ 586, 621 ms, 73 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[179] :: 592 ~ 593, 417 ms, 25 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[180] :: 593 ~ 594, 1233 ms, 95 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[181] :: 594 ~ 595, 1219 ms, 173 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[182] :: 595 ~ 596, 544 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[183] :: 596 ~ 596, 406 ms, 87 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[184] :: 596 ~ 597, 564 ms, 132 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[185] :: 597 ~ 598, 588 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[186] :: 598 ~ 599, 975 ms, 168 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[187] :: 604 ~ 605, 495 ms, 28 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[188] :: 605 ~ 607, 1454 ms, 114 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[189] :: 608 ~ 610, 2008 ms, 339 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[190] :: 610 ~ 611, 387 ms, 47 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[191] :: 611 ~ 611, 492 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[192] :: 611 ~ 613, 1470 ms, 257 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[193] :: 613 ~ 613, 255 ms, 55 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[194] :: 613 ~ 614, 585 ms, 138 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[195] :: 615 ~ 617, 2425 ms, 446 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[196] :: 617 ~ 619, 1943 ms, 275 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[197] :: 619 ~ 620, 532 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[198] :: 620 ~ 622, 2099 ms, 430 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[199] :: 622 ~ 623, 531 ms, 137 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[200] :: 623 ~ 623, 549 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[201] :: 624 ~ 626, 2349 ms, 223 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[202] :: 626 ~ 627, 759 ms, 193 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[203] :: 627 ~ 629, 1812 ms, 481 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[204] :: 629 ~ 630, 916 ms, 119 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[205] :: 636 ~ 636, 411 ms, 28 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[206] :: 636 ~ 638, 1498 ms, 154 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[207] :: 639 ~ 639, 702 ms, 102 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[208] :: 640 ~ 641, 944 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[209] :: 641 ~ 641, 450 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[210] :: 645 ~ 646, 1033 ms, 67 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[211] :: 646 ~ 647, 729 ms, 55 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[212] :: 650 ~ 651, 374 ms, 42 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[213] :: 651 ~ 652, 928 ms, 154 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[214] :: 652 ~ 654, 1916 ms, 453 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[215] :: 654 ~ 656, 2646 ms, 391 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[216] :: 656 ~ 657, 347 ms, 83 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[217] :: 660 ~ 662, 1614 ms, 127 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[218] :: 662 ~ 663, 1511 ms, 275 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[219] :: 663 ~ 664, 1196 ms, 306 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[220] :: 664 ~ 665, 930 ms, 223 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[221] :: 665 ~ 668, 2500 ms, 617 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[222] :: 669 ~ 671, 1694 ms, 310 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[223] :: 671 ~ 672, 693 ms, 161 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[224] :: 672 ~ 672, 725 ms, 168 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[225] :: 675 ~ 676, 461 ms, 58 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[226] :: 676 ~ 677, 561 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[227] :: 677 ~ 678, 1454 ms, 314 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[228] :: 679 ~ 681, 2474 ms, 231 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[229] :: 681 ~ 682, 486 ms, 104 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[230] :: 682 ~ 683, 1421 ms, 383 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[231] :: 685 ~ 686, 538 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[232] :: 687 ~ 689, 2035 ms, 354 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[233] :: 692 ~ 692, 34 ms, 1 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[234] :: 692 ~ 694, 1647 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[235] :: 694 ~ 695, 1162 ms, 191 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[236] :: 695 ~ 695, 225 ms, 46 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[237] :: 695 ~ 696, 1210 ms, 294 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[238] :: 696 ~ 697, 266 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[239] :: 698 ~ 698, 567 ms, 70 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[240] :: 698 ~ 699, 1326 ms, 328 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[241] :: 705 ~ 705, 439 ms, 23 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[242] :: 705 ~ 706, 1159 ms, 93 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[243] :: 706 ~ 707, 394 ms, 30 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[244] :: 707 ~ 709, 2044 ms, 430 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[245] :: 710 ~ 711, 1174 ms, 165 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[246] :: 711 ~ 711, 351 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[247] :: 714 ~ 715, 1361 ms, 239 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[248] :: 718 ~ 720, 2071 ms, 456 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[249] :: 720 ~ 721, 1435 ms, 108 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[250] :: 721 ~ 725, 3635 ms, 700 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[251] :: 725 ~ 725, 311 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[252] :: 725 ~ 726, 478 ms, 118 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[253] :: 726 ~ 727, 986 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[254] :: 727 ~ 728, 799 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[255] :: 728 ~ 730, 1709 ms, 442 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[256] :: 730 ~ 731, 1533 ms, 214 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[257] :: 731 ~ 734, 2190 ms, 483 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[258] :: 736 ~ 737, 532 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[259] :: 737 ~ 737, 487 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[260] :: 737 ~ 738, 735 ms, 89 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[261] :: 738 ~ 739, 741 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[262] :: 740 ~ 743, 2698 ms, 287 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[263] :: 743 ~ 743, 320 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[264] :: 743 ~ 744, 1225 ms, 302 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[265] :: 744 ~ 745, 708 ms, 171 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[266] :: 746 ~ 747, 1183 ms, 184 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[267] :: 747 ~ 747, 354 ms, 80 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[268] :: 753 ~ 755, 2086 ms, 199 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[269] :: 755 ~ 756, 922 ms, 161 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[270] :: 756 ~ 756, 503 ms, 118 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[271] :: 756 ~ 758, 2002 ms, 514 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[272] :: 758 ~ 759, 483 ms, 119 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[273] :: 759 ~ 761, 2048 ms, 353 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[274] :: 761 ~ 761, 503 ms, 119 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[275] :: 768 ~ 770, 2453 ms, 206 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[276] :: 770 ~ 772, 1803 ms, 469 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[277] :: 772 ~ 772, 313 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[278] :: 772 ~ 774, 2274 ms, 598 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[279] :: 774 ~ 776, 1588 ms, 421 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[280] :: 776 ~ 777, 1010 ms, 140 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[281] :: 777 ~ 778, 932 ms, 192 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[282] :: 784 ~ 784, 428 ms, 45 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[283] :: 784 ~ 785, 922 ms, 208 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[284] :: 785 ~ 787, 1733 ms, 455 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[285] :: 787 ~ 790, 2895 ms, 769 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[286] :: 790 ~ 793, 3132 ms, 332 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[287] :: 793 ~ 796, 2588 ms, 639 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[288] :: 796 ~ 796, 282 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[289] :: 796 ~ 797, 768 ms, 196 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[290] :: 797 ~ 798, 1460 ms, 391 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[291] :: 798 ~ 801, 2560 ms, 652 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[292] :: 801 ~ 802, 591 ms, 143 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[293] :: 802 ~ 804, 2381 ms, 459 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[294] :: 804 ~ 807, 2628 ms, 672 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[295] :: 807 ~ 807, 243 ms, 54 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[296] :: 807 ~ 807, 311 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[297] :: 808 ~ 810, 2274 ms, 337 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[298] :: 815 ~ 816, 1247 ms, 263 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[299] :: 817 ~ 820, 3271 ms, 401 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[300] :: 820 ~ 820, 561 ms, 135 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[301] :: 820 ~ 821, 532 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[302] :: 821 ~ 822, 772 ms, 183 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[303] :: 822 ~ 822, 639 ms, 168 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[304] :: 822 ~ 823, 424 ms, 102 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[305] :: 823 ~ 826, 2575 ms, 484 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[306] :: 826 ~ 826, 552 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[307] :: 833 ~ 833, 311 ms, 15 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[308] :: 833 ~ 833, 305 ms, 17 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[309] :: 833 ~ 835, 1212 ms, 102 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[310] :: 835 ~ 836, 1650 ms, 329 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[311] :: 838 ~ 841, 2774 ms, 590 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[312] :: 841 ~ 841, 211 ms, 46 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[313] :: 844 ~ 845, 1136 ms, 161 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[314] :: 846 ~ 847, 1684 ms, 119 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[315] :: 847 ~ 849, 1348 ms, 129 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[316] :: 849 ~ 849, 209 ms, 34 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[317] :: 849 ~ 849, 280 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[318] :: 849 ~ 850, 809 ms, 209 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[319] :: 851 ~ 853, 2447 ms, 502 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[320] :: 853 ~ 854, 811 ms, 209 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[321] :: 855 ~ 856, 990 ms, 145 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[322] :: 859 ~ 860, 931 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[323] :: 861 ~ 861, 543 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[324] :: 861 ~ 863, 1230 ms, 82 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[325] :: 863 ~ 865, 2049 ms, 274 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[326] :: 865 ~ 865, 305 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[327] :: 865 ~ 865, 457 ms, 106 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[328] :: 866 ~ 867, 1205 ms, 307 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[329] :: 867 ~ 868, 822 ms, 201 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[330] :: 868 ~ 870, 1384 ms, 201 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[331] :: 870 ~ 870, 710 ms, 168 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[332] :: 870 ~ 872, 1619 ms, 385 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[333] :: 878 ~ 878, 126 ms, 5 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[334] :: 878 ~ 880, 2456 ms, 209 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[335] :: 880 ~ 881, 492 ms, 95 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[336] :: 881 ~ 882, 1558 ms, 402 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[337] :: 882 ~ 884, 1828 ms, 473 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[338] :: 885 ~ 886, 1054 ms, 151 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[339] :: 886 ~ 887, 512 ms, 106 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[340] :: 892 ~ 893, 432 ms, 28 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[341] :: 893 ~ 896, 3009 ms, 417 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[342] :: 896 ~ 896, 173 ms, 30 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[343] :: 896 ~ 896, 368 ms, 86 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[344] :: 896 ~ 898, 2186 ms, 588 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[345] :: 898 ~ 901, 2569 ms, 663 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[346] :: 901 ~ 902, 992 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[347] :: 902 ~ 905, 3034 ms, 773 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[348] :: 905 ~ 907, 2108 ms, 533 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[349] :: 907 ~ 908, 316 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[350] :: 913 ~ 913, 211 ms, 25 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[351] :: 914 ~ 914, 334 ms, 41 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[352] :: 915 ~ 916, 1008 ms, 184 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[353] :: 917 ~ 919, 2840 ms, 243 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[354] :: 920 ~ 920, 276 ms, 60 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[355] :: 920 ~ 920, 315 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[356] :: 920 ~ 920, 282 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[357] :: 920 ~ 922, 2100 ms, 534 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[358] :: 923 ~ 925, 1806 ms, 256 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[359] :: 927 ~ 927, 224 ms, 19 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[360] :: 930 ~ 931, 511 ms, 60 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[361] :: 931 ~ 931, 740 ms, 172 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[362] :: 932 ~ 933, 864 ms, 58 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[363] :: 933 ~ 936, 3802 ms, 665 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[364] :: 936 ~ 938, 1243 ms, 300 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[365] :: 938 ~ 938, 573 ms, 136 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[366] :: 938 ~ 941, 2844 ms, 736 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[367] :: 941 ~ 943, 1333 ms, 186 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[368] :: 943 ~ 944, 859 ms, 192 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[369] :: 944 ~ 945, 990 ms, 239 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[370] :: 945 ~ 947, 1803 ms, 257 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[371] :: 951 ~ 951, 334 ms, 32 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[372] :: 953 ~ 954, 1029 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[373] :: 954 ~ 955, 831 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[374] :: 955 ~ 957, 2181 ms, 459 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[375] :: 957 ~ 958, 1539 ms, 397 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[376] :: 958 ~ 960, 1405 ms, 372 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[377] :: 960 ~ 960, 568 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[378] :: 960 ~ 961, 699 ms, 167 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[379] :: 961 ~ 964, 2639 ms, 670 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[380] :: 964 ~ 966, 1804 ms, 257 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[381] :: 966 ~ 967, 802 ms, 192 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[382] :: 967 ~ 968, 1345 ms, 341 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[383] :: 972 ~ 975, 2509 ms, 470 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[384] :: 975 ~ 975, 362 ms, 83 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[385] :: 975 ~ 976, 844 ms, 107 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[386] :: 976 ~ 978, 1559 ms, 397 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[387] :: 978 ~ 978, 118 ms, 23 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[388] :: 978 ~ 981, 3460 ms, 433 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[389] :: 981 ~ 982, 302 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[390] :: 985 ~ 986, 1398 ms, 200 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[391] :: 986 ~ 987, 909 ms, 123 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[392] :: 987 ~ 988, 768 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[393] :: 988 ~ 989, 960 ms, 192 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[394] :: 989 ~ 990, 568 ms, 68 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[395] :: 990 ~ 992, 2326 ms, 490 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[396] :: 992 ~ 993, 655 ms, 158 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[397] :: 994 ~ 994, 530 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[398] :: 995 ~ 998, 3428 ms, 375 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[399] :: 998 ~ 998, 518 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[400] :: 998 ~ 1001, 2895 ms, 761 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[401] :: 1001 ~ 1003, 1190 ms, 312 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[402] :: 1003 ~ 1006, 2764 ms, 499 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[403] :: 1006 ~ 1008, 2661 ms, 659 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[404] :: 1008 ~ 1011, 2390 ms, 642 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[405] :: 1014 ~ 1015, 660 ms, 74 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[406] :: 1015 ~ 1018, 2741 ms, 497 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[407] :: 1018 ~ 1019, 837 ms, 125 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[408] :: 1020 ~ 1024, 3943 ms, 543 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[409] :: 1024 ~ 1024, 314 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[410] :: 1024 ~ 1026, 1918 ms, 490 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[411] :: 1026 ~ 1026, 535 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[412] :: 1026 ~ 1027, 668 ms, 167 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[413] :: 1027 ~ 1028, 786 ms, 196 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[414] :: 1028 ~ 1029, 1296 ms, 328 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[415] :: 1031 ~ 1033, 2034 ms, 362 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[416] :: 1033 ~ 1033, 143 ms, 32 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[417] :: 1034 ~ 1034, 483 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[418] :: 1035 ~ 1037, 2279 ms, 403 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[419] :: 1040 ~ 1043, 3079 ms, 324 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[420] :: 1043 ~ 1044, 561 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[421] :: 1044 ~ 1045, 1474 ms, 360 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[422] :: 1045 ~ 1048, 2407 ms, 621 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[423] :: 1048 ~ 1048, 508 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[424] :: 1049 ~ 1050, 1523 ms, 256 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[425] :: 1050 ~ 1051, 944 ms, 227 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[426] :: 1051 ~ 1054, 2411 ms, 383 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[427] :: 1054 ~ 1055, 888 ms, 241 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[428] :: 1057 ~ 1057, 610 ms, 75 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[429] :: 1059 ~ 1059, 796 ms, 103 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[430] :: 1060 ~ 1063, 2904 ms, 650 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[431] :: 1063 ~ 1065, 2293 ms, 177 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[432] :: 1065 ~ 1066, 878 ms, 144 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[433] :: 1066 ~ 1066, 310 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[434] :: 1066 ~ 1069, 2628 ms, 701 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[435] :: 1069 ~ 1071, 1941 ms, 526 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[436] :: 1072 ~ 1075, 3121 ms, 637 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[437] :: 1078 ~ 1079, 442 ms, 53 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[438] :: 1079 ~ 1080, 1066 ms, 238 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[439] :: 1080 ~ 1081, 914 ms, 144 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[440] :: 1081 ~ 1083, 1744 ms, 459 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[441] :: 1083 ~ 1085, 1415 ms, 220 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[442] :: 1085 ~ 1087, 2621 ms, 643 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[443] :: 1088 ~ 1091, 3299 ms, 341 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[444] :: 1091 ~ 1092, 809 ms, 227 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[445] :: 1092 ~ 1093, 1033 ms, 257 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[446] :: 1093 ~ 1095, 2298 ms, 585 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[447] :: 1096 ~ 1097, 1693 ms, 297 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[448] :: 1098 ~ 1101, 3429 ms, 665 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[449] :: 1102 ~ 1103, 452 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[450] :: 1104 ~ 1105, 811 ms, 140 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[451] :: 1107 ~ 1109, 2589 ms, 595 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[452] :: 1110 ~ 1112, 2875 ms, 264 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[453] :: 1112 ~ 1114, 1907 ms, 485 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[454] :: 1114 ~ 1115, 449 ms, 101 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[455] :: 1115 ~ 1116, 1407 ms, 350 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[456] :: 1116 ~ 1117, 1157 ms, 289 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[457] :: 1117 ~ 1120, 2047 ms, 562 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[458] :: 1120 ~ 1121, 1451 ms, 211 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[459] :: 1121 ~ 1122, 985 ms, 220 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[460] :: 1125 ~ 1125, 299 ms, 46 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[461] :: 1126 ~ 1128, 2461 ms, 385 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[462] :: 1128 ~ 1129, 521 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[463] :: 1129 ~ 1132, 2650 ms, 688 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[464] :: 1132 ~ 1134, 2692 ms, 696 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[465] :: 1135 ~ 1136, 1475 ms, 245 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[466] :: 1136 ~ 1138, 1911 ms, 466 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[467] :: 1138 ~ 1139, 1329 ms, 368 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[468] :: 1140 ~ 1144, 4026 ms, 564 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[469] :: 1144 ~ 1146, 1974 ms, 505 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[470] :: 1146 ~ 1148, 2309 ms, 593 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[471] :: 1148 ~ 1149, 1027 ms, 275 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[472] :: 1149 ~ 1151, 1322 ms, 193 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[473] :: 1151 ~ 1152, 1027 ms, 229 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[474] :: 1152 ~ 1153, 1183 ms, 305 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[475] :: 1158 ~ 1160, 2115 ms, 491 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[476] :: 1160 ~ 1161, 508 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[477] :: 1161 ~ 1164, 2588 ms, 645 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[478] :: 1164 ~ 1167, 3045 ms, 774 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[479] :: 1167 ~ 1168, 1026 ms, 260 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[480] :: 1168 ~ 1172, 4530 ms, 710 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[481] :: 1172 ~ 1173, 55 ms, 1 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[482] :: 1173 ~ 1175, 2883 ms, 763 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[483] :: 1175 ~ 1178, 3007 ms, 784 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[484] :: 1178 ~ 1179, 979 ms, 249 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[485] :: 1179 ~ 1180, 970 ms, 257 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[486] :: 1181 ~ 1183, 2760 ms, 455 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[487] :: 1183 ~ 1185, 1198 ms, 304 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[488] :: 1185 ~ 1186, 1295 ms, 330 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[489] :: 1187 ~ 1189, 2000 ms, 333 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[490] :: 1189 ~ 1189, 291 ms, 60 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[491] :: 1192 ~ 1192, 503 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[492] :: 1192 ~ 1193, 475 ms, 71 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[493] :: 1193 ~ 1196, 3369 ms, 696 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[494] :: 1196 ~ 1196, 196 ms, 38 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[495] :: 1198 ~ 1201, 2628 ms, 230 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[496] :: 1201 ~ 1201, 567 ms, 136 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[497] :: 1201 ~ 1203, 2240 ms, 601 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[498] :: 1204 ~ 1205, 1438 ms, 223 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[499] :: 1205 ~ 1207, 1243 ms, 285 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[500] :: 1209 ~ 1213, 3654 ms, 782 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[501] :: 1213 ~ 1214, 1053 ms, 142 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[502] :: 1214 ~ 1216, 1174 ms, 178 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[503] :: 1216 ~ 1219, 2851 ms, 783 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[504] :: 1219 ~ 1223, 3882 ms, 879 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[505] :: 1223 ~ 1223, 192 ms, 38 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[506] :: 1223 ~ 1225, 1796 ms, 481 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[507] :: 1225 ~ 1228, 3201 ms, 321 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[508] :: 1228 ~ 1229, 872 ms, 223 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[509] :: 1229 ~ 1230, 1008 ms, 247 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[510] :: 1230 ~ 1231, 1115 ms, 289 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[511] :: 1231 ~ 1234, 2389 ms, 638 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[512] :: 1234 ~ 1236, 2106 ms, 334 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[513] :: 1237 ~ 1237, 66 ms, 1 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[514] :: 1238 ~ 1240, 2344 ms, 450 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[515] :: 1242 ~ 1244, 2135 ms, 307 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[516] :: 1244 ~ 1246, 2281 ms, 572 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[517] :: 1246 ~ 1247, 532 ms, 129 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[518] :: 1247 ~ 1250, 2869 ms, 604 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[519] :: 1250 ~ 1253, 2556 ms, 650 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[520] :: 1253 ~ 1253, 528 ms, 131 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[521] :: 1255 ~ 1258, 3269 ms, 386 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[522] :: 1258 ~ 1259, 1205 ms, 323 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[523] :: 1259 ~ 1261, 1357 ms, 342 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[524] :: 1261 ~ 1264, 3068 ms, 687 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[525] :: 1266 ~ 1267, 1536 ms, 280 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[526] :: 1267 ~ 1268, 304 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[527] :: 1269 ~ 1271, 2597 ms, 488 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[528] :: 1273 ~ 1274, 1372 ms, 201 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[529] :: 1274 ~ 1276, 2110 ms, 527 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[530] :: 1276 ~ 1277, 1315 ms, 321 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[531] :: 1278 ~ 1282, 4378 ms, 663 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[532] :: 1282 ~ 1283, 752 ms, 193 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[533] :: 1283 ~ 1284, 554 ms, 125 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[534] :: 1284 ~ 1284, 567 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[535] :: 1284 ~ 1286, 2001 ms, 491 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[536] :: 1287 ~ 1290, 3650 ms, 702 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[537] :: 1290 ~ 1292, 1644 ms, 427 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[538] :: 1292 ~ 1296, 3933 ms, 731 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[539] :: 1296 ~ 1297, 549 ms, 138 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[540] :: 1297 ~ 1298, 1138 ms, 276 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[541] :: 1299 ~ 1300, 1338 ms, 193 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[542] :: 1301 ~ 1302, 1222 ms, 216 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[543] :: 1302 ~ 1304, 1951 ms, 510 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[544] :: 1305 ~ 1308, 3181 ms, 700 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[545] :: 1308 ~ 1308, 427 ms, 98 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[546] :: 1308 ~ 1309, 758 ms, 194 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[547] :: 1311 ~ 1315, 4426 ms, 655 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[548] :: 1315 ~ 1316, 936 ms, 235 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[549] :: 1316 ~ 1317, 1278 ms, 321 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[550] :: 1318 ~ 1320, 2705 ms, 514 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[551] :: 1320 ~ 1322, 1254 ms, 320 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[552] :: 1322 ~ 1326, 3968 ms, 732 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[553] :: 1326 ~ 1327, 792 ms, 105 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[554] :: 1328 ~ 1330, 2575 ms, 498 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[555] :: 1330 ~ 1331, 517 ms, 133 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[556] :: 1331 ~ 1332, 1312 ms, 242 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[557] :: 1335 ~ 1338, 2956 ms, 636 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[558] :: 1338 ~ 1339, 945 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[559] :: 1339 ~ 1341, 1648 ms, 389 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[560] :: 1341 ~ 1344, 3106 ms, 801 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[561] :: 1347 ~ 1348, 1466 ms, 318 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[562] :: 1348 ~ 1349, 969 ms, 245 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[563] :: 1349 ~ 1352, 2294 ms, 452 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[564] :: 1352 ~ 1353, 1091 ms, 266 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[565] :: 1353 ~ 1357, 3401 ms, 705 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[566] :: 1357 ~ 1358, 1133 ms, 308 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[567] :: 1361 ~ 1364, 2393 ms, 569 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[568] :: 1364 ~ 1365, 1808 ms, 460 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[569] :: 1366 ~ 1368, 2945 ms, 553 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[570] :: 1368 ~ 1370, 1307 ms, 318 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[571] :: 1370 ~ 1372, 1902 ms, 514 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[572] :: 1372 ~ 1374, 2323 ms, 529 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[573] :: 1375 ~ 1377, 1889 ms, 321 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[574] :: 1377 ~ 1379, 2052 ms, 416 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[575] :: 1379 ~ 1380, 397 ms, 89 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[576] :: 1380 ~ 1382, 2498 ms, 604 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[577] :: 1383 ~ 1384, 1387 ms, 206 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[578] :: 1384 ~ 1385, 1212 ms, 312 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[579] :: 1386 ~ 1388, 1471 ms, 301 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[580] :: 1392 ~ 1394, 1557 ms, 312 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[581] :: 1394 ~ 1395, 1377 ms, 345 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[582] :: 1395 ~ 1397, 1710 ms, 422 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[583] :: 1397 ~ 1400, 2522 ms, 479 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[584] :: 1400 ~ 1402, 2380 ms, 629 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[585] :: 1403 ~ 1405, 2016 ms, 342 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[586] :: 1405 ~ 1406, 922 ms, 137 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[587] :: 1406 ~ 1408, 1376 ms, 354 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[588] :: 1408 ~ 1410, 2138 ms, 358 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[589] :: 1410 ~ 1412, 2084 ms, 551 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[590] :: 1417 ~ 1419, 2651 ms, 443 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[591] :: 1419 ~ 1421, 1462 ms, 373 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[592] :: 1421 ~ 1423, 2527 ms, 655 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[593] :: 1423 ~ 1426, 2492 ms, 637 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[594] :: 1426 ~ 1427, 1005 ms, 257 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[595] :: 1427 ~ 1428, 1686 ms, 415 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[596] :: 1428 ~ 1431, 2483 ms, 574 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[597] :: 1431 ~ 1432, 1301 ms, 315 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[598] :: 1432 ~ 1434, 1726 ms, 418 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[599] :: 1434 ~ 1437, 2289 ms, 401 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[600] :: 1437 ~ 1438, 1605 ms, 388 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[601] :: 1438 ~ 1440, 1609 ms, 415 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[602] :: 1440 ~ 1443, 3125 ms, 587 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[603] :: 1443 ~ 1446, 2307 ms, 458 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[604] :: 1446 ~ 1448, 1992 ms, 503 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[605] :: 1452 ~ 1453, 1148 ms, 192 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[606] :: 1453 ~ 1456, 2313 ms, 600 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[607] :: 1456 ~ 1458, 2181 ms, 363 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[608] :: 1458 ~ 1460, 1348 ms, 335 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[609] :: 1460 ~ 1461, 1840 ms, 460 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[610] :: 1462 ~ 1463, 1631 ms, 211 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[611] :: 1463 ~ 1465, 1685 ms, 441 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[612] :: 1470 ~ 1471, 1572 ms, 347 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[613] :: 1472 ~ 1475, 3214 ms, 639 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[614] :: 1475 ~ 1477, 1806 ms, 463 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[615] :: 1477 ~ 1478, 950 ms, 136 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[616] :: 1478 ~ 1480, 2241 ms, 588 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[617] :: 1482 ~ 1483, 913 ms, 180 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[618] :: 1483 ~ 1485, 1813 ms, 285 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[619] :: 1487 ~ 1488, 1151 ms, 292 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[620] :: 1497 ~ 1498, 937 ms, 220 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[621] :: 1507 ~ 1508, 1022 ms, 222 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[622] :: 1508 ~ 1508, 837 ms, 193 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[623] :: 1508 ~ 1509, 972 ms, 236 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[624] :: 1571 ~ 1572, 1202 ms, 251 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[625] :: 1572 ~ 1573, 1396 ms, 335 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[626] :: 1575 ~ 1577, 1976 ms, 442 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[627] :: 1602 ~ 1604, 1589 ms, 392 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[628] :: 1635 ~ 1635, 269 ms, 52 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[629] :: 1658 ~ 1659, 609 ms, 139 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[630] :: 1666 ~ 1667, 1787 ms, 418 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[631] :: 1667 ~ 1668, 445 ms, 106 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[632] :: 1668 ~ 1669, 1586 ms, 420 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[633] :: 1669 ~ 1671, 1683 ms, 423 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[634] :: 1699 ~ 1699, 396 ms, 53 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[635] :: 1729 ~ 1730, 529 ms, 117 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[636] :: 1758 ~ 1759, 1199 ms, 261 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[637] :: 1759 ~ 1761, 1793 ms, 482 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[638] :: 1790 ~ 1792, 1658 ms, 375 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[639] :: 1792 ~ 1792, 306 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[640] :: 1792 ~ 1794, 1276 ms, 260 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[641] :: 1822 ~ 1823, 574 ms, 91 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[642] :: 1823 ~ 1824, 1436 ms, 354 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[643] :: 1824 ~ 1825, 1270 ms, 321 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[644] :: 1841 ~ 1843, 1732 ms, 408 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[645] :: 1854 ~ 1855, 113 ms, 7 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[646] :: 1855 ~ 1856, 977 ms, 217 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[647] :: 1856 ~ 1857, 1171 ms, 293 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[648] :: 1857 ~ 1857, 470 ms, 97 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[649] :: 1857 ~ 1859, 1972 ms, 472 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[650] :: 1886 ~ 1887, 604 ms, 110 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[651] :: 1887 ~ 1888, 1175 ms, 285 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[652] :: 1888 ~ 1890, 1789 ms, 435 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[653] :: 1895 ~ 1897, 2493 ms, 632 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[654] :: 1897 ~ 1900, 2439 ms, 637 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[655] :: 1922 ~ 1922, 263 ms, 32 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[656] :: 1923 ~ 1923, 317 ms, 57 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[657] :: 1951 ~ 1952, 697 ms, 137 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[658] :: 1952 ~ 1954, 1825 ms, 417 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[659] :: 1960 ~ 1962, 2356 ms, 578 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[660] :: 2010 ~ 2012, 1830 ms, 421 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[661] :: 2034 ~ 2035, 1309 ms, 295 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[662] :: 2040 ~ 2041, 783 ms, 132 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[663] :: 2041 ~ 2042, 1524 ms, 417 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[664] :: 2042 ~ 2045, 2720 ms, 706 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[665] :: 2045 ~ 2045, 166 ms, 32 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[666] :: 2051 ~ 2051, 116 ms, 7 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[667] :: 2067 ~ 2067, 242 ms, 49 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[668] :: 2073 ~ 2075, 1360 ms, 271 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[669] :: 2075 ~ 2077, 2051 ms, 534 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[670] :: 2077 ~ 2079, 1809 ms, 467 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[671] :: 2125 ~ 2126, 548 ms, 124 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[672] :: 2132 ~ 2132, 723 ms, 129 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[673] :: 2132 ~ 2133, 271 ms, 62 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[674] :: 2161 ~ 2161, 95 ms, 9 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[675] :: 2162 ~ 2163, 1683 ms, 385 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[676] :: 2163 ~ 2164, 685 ms, 168 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[677] :: 2167 ~ 2169, 2241 ms, 502 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[678] :: 2172 ~ 2174, 1889 ms, 445 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[679] :: 2174 ~ 2176, 2135 ms, 551 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[680] :: 2184 ~ 2184, 598 ms, 132 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[681] :: 2190 ~ 2192, 1423 ms, 323 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[682] :: 2197 ~ 2198, 1469 ms, 355 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[683] :: 2198 ~ 2201, 2347 ms, 586 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[684] :: 2205 ~ 2208, 2914 ms, 700 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[685] :: 2228 ~ 2229, 733 ms, 139 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[686] :: 2229 ~ 2230, 1071 ms, 298 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[687] :: 2230 ~ 2233, 2269 ms, 507 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[688] :: 2236 ~ 2236, 911 ms, 177 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[689] :: 2236 ~ 2240, 3135 ms, 779 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[690] :: 2290 ~ 2292, 2043 ms, 426 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[691] :: 2318 ~ 2318, 884 ms, 153 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[692] :: 2319 ~ 2321, 2359 ms, 488 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[693] :: 2347 ~ 2348, 582 ms, 101 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[694] :: 2348 ~ 2349, 1448 ms, 379 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[695] :: 2377 ~ 2377, 57 ms, 1 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[696] :: 2377 ~ 2378, 1088 ms, 235 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[697] :: 2378 ~ 2380, 2010 ms, 535 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[698] :: 2380 ~ 2382, 2310 ms, 566 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[699] :: 2395 ~ 2395, 47 ms, 1 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[700] :: 2407 ~ 2409, 2176 ms, 477 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[701] :: 2409 ~ 2411, 1934 ms, 486 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[702] :: 2411 ~ 2413, 1757 ms, 467 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[703] :: 2415 ~ 2416, 486 ms, 88 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[704] :: 2441 ~ 2442, 656 ms, 113 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[705] :: 2442 ~ 2443, 1195 ms, 301 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[706] :: 2443 ~ 2443, 355 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[707] :: 2443 ~ 2445, 1835 ms, 437 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[708] :: 2475 ~ 2477, 2201 ms, 538 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[709] :: 2477 ~ 2479, 1646 ms, 420 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[710] :: 2500 ~ 2501, 743 ms, 193 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[711] :: 2527 ~ 2529, 2177 ms, 509 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[712] :: 2529 ~ 2530, 559 ms, 151 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[713] :: 2557 ~ 2557, 97 ms, 4 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[714] :: 2558 ~ 2559, 1506 ms, 355 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[715] :: 2587 ~ 2588, 809 ms, 168 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[716] :: 2597 ~ 2599, 1711 ms, 395 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[717] :: 2608 ~ 2608, 340 ms, 75 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[718] :: 2614 ~ 2616, 2023 ms, 500 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[719] :: 2617 ~ 2619, 2132 ms, 529 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[720] :: 2621 ~ 2623, 1476 ms, 329 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[721] :: 2623 ~ 2625, 2491 ms, 601 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[722] :: 2648 ~ 2649, 742 ms, 146 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[723] :: 2649 ~ 2650, 755 ms, 198 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[724] :: 2650 ~ 2652, 1638 ms, 434 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[725] :: 2652 ~ 2654, 2513 ms, 616 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[726] :: 2655 ~ 2658, 3507 ms, 820 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[727] :: 2660 ~ 2663, 3091 ms, 750 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[728] :: 2686 ~ 2688, 1643 ms, 377 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[729] :: 2688 ~ 2690, 1485 ms, 378 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[730] :: 2716 ~ 2716, 438 ms, 57 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[731] :: 2717 ~ 2719, 2228 ms, 535 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[732] :: 2726 ~ 2726, 505 ms, 95 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[733] :: 2726 ~ 2729, 2279 ms, 525 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[734] :: 2747 ~ 2748, 1073 ms, 231 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[735] :: 2748 ~ 2749, 384 ms, 94 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[736] :: 2776 ~ 2777, 1416 ms, 331 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[737] :: 2777 ~ 2779, 2083 ms, 541 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[738] :: 2779 ~ 2782, 2918 ms, 796 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[739] :: 2784 ~ 2786, 2119 ms, 476 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[740] :: 2786 ~ 2789, 2998 ms, 791 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[741] :: 2813 ~ 2814, 1738 ms, 420 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[742] :: 2847 ~ 2848, 591 ms, 110 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[743] :: 2848 ~ 2850, 2704 ms, 628 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[744] :: 2851 ~ 2852, 1677 ms, 440 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[745] :: 2871 ~ 2871, 273 ms, 60 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[746] :: 2871 ~ 2873, 1705 ms, 389 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[747] :: 2873 ~ 2874, 1351 ms, 355 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[748] :: 2901 ~ 2902, 547 ms, 95 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[749] :: 2902 ~ 2904, 2782 ms, 745 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[750] :: 2905 ~ 2907, 2194 ms, 551 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[751] :: 2907 ~ 2910, 2846 ms, 748 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[752] :: 2936 ~ 2937, 1067 ms, 232 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[753] :: 2937 ~ 2937, 733 ms, 175 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[754] :: 2938 ~ 2940, 1928 ms, 485 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[755] :: 2968 ~ 2970, 1886 ms, 434 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[756] :: 2972 ~ 2974, 1530 ms, 342 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[757] :: 2974 ~ 2976, 1673 ms, 464 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[758] :: 2977 ~ 2978, 940 ms, 218 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[759] :: 2998 ~ 3000, 2345 ms, 566 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[760] :: 3000 ~ 3002, 1852 ms, 429 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[761] :: 3002 ~ 3004, 2207 ms, 589 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[762] :: 3004 ~ 3007, 2782 ms, 764 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[763] :: 3034 ~ 3035, 453 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[764] :: 3035 ~ 3036, 922 ms, 226 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[765] :: 3040 ~ 3040, 588 ms, 102 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[766] :: 3040 ~ 3043, 2573 ms, 674 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[767] :: 3066 ~ 3068, 1609 ms, 368 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[768] :: 3071 ~ 3074, 2852 ms, 657 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[769] :: 3074 ~ 3075, 1451 ms, 316 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[770] :: 3098 ~ 3099, 871 ms, 159 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[771] :: 3099 ~ 3101, 2000 ms, 538 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[772] :: 3101 ~ 3102, 1518 ms, 394 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[773] :: 3104 ~ 3107, 3182 ms, 850 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[774] :: 3110 ~ 3112, 1822 ms, 425 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[775] :: 3112 ~ 3113, 1045 ms, 273 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[776] :: 3128 ~ 3128, 283 ms, 49 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[777] :: 3134 ~ 3136, 2048 ms, 507 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[778] :: 3136 ~ 3139, 2669 ms, 646 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[779] :: 3142 ~ 3143, 729 ms, 149 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[780] :: 3143 ~ 3146, 3475 ms, 929 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[781] :: 3167 ~ 3169, 1865 ms, 394 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[782] :: 3169 ~ 3169, 462 ms, 115 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[783] :: 3176 ~ 3178, 1960 ms, 481 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[784] :: 3178 ~ 3180, 2310 ms, 591 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[785] :: 3200 ~ 3202, 1402 ms, 321 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[786] :: 3204 ~ 3206, 1716 ms, 403 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[787] :: 3206 ~ 3208, 1964 ms, 475 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[788] :: 3230 ~ 3230, 341 ms, 44 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[789] :: 3235 ~ 3236, 1549 ms, 328 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[790] :: 3236 ~ 3239, 3070 ms, 796 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[791] :: 3259 ~ 3260, 485 ms, 73 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[792] :: 3285 ~ 3287, 1378 ms, 298 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[793] :: 3287 ~ 3288, 1433 ms, 388 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[794] :: 3289 ~ 3290, 796 ms, 199 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[795] :: 3290 ~ 3292, 1761 ms, 446 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[796] :: 3317 ~ 3319, 2223 ms, 498 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[797] :: 3326 ~ 3327, 1792 ms, 411 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[798] :: 3327 ~ 3331, 3116 ms, 816 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[799] :: 3350 ~ 3351, 975 ms, 214 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[800] :: 3379 ~ 3380, 642 ms, 98 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[801] :: 3383 ~ 3387, 3444 ms, 865 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[802] :: 3389 ~ 3391, 2137 ms, 503 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[803] :: 3409 ~ 3411, 2541 ms, 625 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[804] :: 3411 ~ 3413, 1827 ms, 480 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[805] :: 3413 ~ 3414, 873 ms, 225 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[806] :: 3417 ~ 3420, 2947 ms, 684 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[807] :: 3437 ~ 3438, 661 ms, 149 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[808] :: 3443 ~ 3444, 450 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[809] :: 3444 ~ 3446, 2101 ms, 478 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[810] :: 3500 ~ 3500, 261 ms, 27 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[811] :: 3500 ~ 3501, 1032 ms, 242 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[812] :: 3505 ~ 3507, 2343 ms, 489 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[813] :: 3507 ~ 3508, 380 ms, 91 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[814] :: 3517 ~ 3518, 1124 ms, 301 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[815] :: 3530 ~ 3532, 2482 ms, 635 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[816] :: 3533 ~ 3537, 3400 ms, 808 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[817] :: 3537 ~ 3539, 2009 ms, 535 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[818] :: 3564 ~ 3565, 1527 ms, 376 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[819] :: 3573 ~ 3573, 897 ms, 193 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[820] :: 3580 ~ 3582, 1085 ms, 243 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[821] :: 3594 ~ 3595, 446 ms, 61 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[822] :: 3595 ~ 3595, 353 ms, 78 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[823] :: 3599 ~ 3600, 901 ms, 186 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[824] :: 3600 ~ 3602, 1429 ms, 339 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[825] :: 3623 ~ 3626, 2164 ms, 517 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[826] :: 3645 ~ 3645, 421 ms, 104 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[827] :: 3651 ~ 3654, 2325 ms, 598 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[828] :: 3654 ~ 3657, 3463 ms, 848 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[829] :: 3657 ~ 3660, 2598 ms, 681 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[830] :: 3662 ~ 3664, 2502 ms, 577 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[831] :: 3682 ~ 3683, 1059 ms, 240 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[832] :: 3694 ~ 3697, 2726 ms, 712 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[833] :: 3697 ~ 3699, 2140 ms, 559 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[834] :: 3720 ~ 3722, 1315 ms, 271 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[835] :: 3722 ~ 3724, 2107 ms, 547 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[836] :: 3724 ~ 3727, 3130 ms, 786 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[837] :: 3727 ~ 3727, 181 ms, 36 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[838] :: 3727 ~ 3730, 2482 ms, 654 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[839] :: 3730 ~ 3732, 1852 ms, 451 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[840] :: 3758 ~ 3758, 290 ms, 28 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[841] :: 3758 ~ 3759, 1077 ms, 250 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[842] :: 3763 ~ 3765, 2241 ms, 566 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[843] :: 3794 ~ 3795, 1359 ms, 310 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[844] :: 3795 ~ 3797, 2019 ms, 550 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[845] :: 3816 ~ 3817, 270 ms, 32 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[846] :: 3817 ~ 3817, 330 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[847] :: 3819 ~ 3821, 2103 ms, 514 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[848] :: 3822 ~ 3825, 2813 ms, 660 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[849] :: 3825 ~ 3828, 3176 ms, 849 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[850] :: 3849 ~ 3850, 1115 ms, 219 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[851] :: 3850 ~ 3850, 553 ms, 136 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[852] :: 3850 ~ 3853, 2340 ms, 645 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[853] :: 3857 ~ 3860, 3088 ms, 776 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[854] :: 3860 ~ 3861, 1035 ms, 273 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[855] :: 3863 ~ 3864, 1063 ms, 259 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[856] :: 3864 ~ 3868, 3609 ms, 912 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[857] :: 3868 ~ 3869, 1189 ms, 296 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[858] :: 3888 ~ 3889, 401 ms, 56 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[859] :: 3939 ~ 3939, 64 ms, 1 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[860] :: 3939 ~ 3940, 721 ms, 145 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[861] :: 3941 ~ 3943, 1740 ms, 446 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[862] :: 3962 ~ 3963, 788 ms, 187 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[863] :: 3968 ~ 3969, 722 ms, 131 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[864] :: 3969 ~ 3969, 548 ms, 139 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[865] :: 3969 ~ 3970, 1307 ms, 340 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[866] :: 3973 ~ 3975, 2845 ms, 691 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[867] :: 3975 ~ 3979, 3300 ms, 905 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[868] :: 3979 ~ 3982, 2911 ms, 708 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[869] :: 3982 ~ 3984, 1664 ms, 457 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[870] :: 4005 ~ 4005, 414 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[871] :: 4005 ~ 4006, 271 ms, 48 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[872] :: 4011 ~ 4013, 1867 ms, 386 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[873] :: 4034 ~ 4034, 103 ms, 11 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[874] :: 4046 ~ 4048, 1774 ms, 417 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[875] :: 4058 ~ 4058, 343 ms, 49 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[876] :: 4059 ~ 4061, 2853 ms, 708 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[877] :: 4066 ~ 4067, 1106 ms, 283 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[878] :: 4087 ~ 4088, 527 ms, 78 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[879] :: 4088 ~ 4089, 840 ms, 220 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[880] :: 4095 ~ 4096, 1483 ms, 397 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[881] :: 4116 ~ 4119, 2826 ms, 714 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[882] :: 4125 ~ 4127, 2338 ms, 602 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[883] :: 4148 ~ 4148, 830 ms, 179 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[884] :: 4148 ~ 4149, 712 ms, 182 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[885] :: 4149 ~ 4150, 988 ms, 263 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[886] :: 4154 ~ 4156, 1276 ms, 271 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[887] :: 4156 ~ 4158, 2123 ms, 561 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[888] :: 4179 ~ 4179, 744 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[889] :: 4179 ~ 4180, 334 ms, 79 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[890] :: 4181 ~ 4183, 2263 ms, 512 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[891] :: 4195 ~ 4199, 3226 ms, 778 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[892] :: 4208 ~ 4211, 3204 ms, 779 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[893] :: 4211 ~ 4213, 2095 ms, 534 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[894] :: 4213 ~ 4216, 2947 ms, 721 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[895] :: 4218 ~ 4223, 4346 ms, 1012 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[896] :: 4252 ~ 4255, 2661 ms, 655 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[897] :: 4255 ~ 4256, 895 ms, 198 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[898] :: 4274 ~ 4275, 1117 ms, 248 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[899] :: 4275 ~ 4277, 1637 ms, 426 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[900] :: 4277 ~ 4278, 697 ms, 149 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[901] :: 4278 ~ 4280, 1819 ms, 489 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[902] :: 4282 ~ 4284, 2384 ms, 521 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[903] :: 4305 ~ 4308, 2389 ms, 512 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[904] :: 4312 ~ 4312, 60 ms, 2 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[905] :: 4334 ~ 4335, 913 ms, 198 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[906] :: 4335 ~ 4337, 1772 ms, 459 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[907] :: 4361 ~ 4362, 414 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[908] :: 4364 ~ 4364, 48 ms, 0 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[909] :: 4386 ~ 4389, 2690 ms, 660 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[910] :: 4389 ~ 4390, 478 ms, 101 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[911] :: 4414 ~ 4414, 225 ms, 21 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[912] :: 4418 ~ 4420, 2618 ms, 659 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[913] :: 4441 ~ 4443, 1772 ms, 413 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[914] :: 4443 ~ 4445, 2464 ms, 610 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[915] :: 4447 ~ 4449, 2794 ms, 657 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[916] :: 4461 ~ 4462, 570 ms, 118 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[917] :: 4473 ~ 4474, 576 ms, 78 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[918] :: 4474 ~ 4476, 1578 ms, 403 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[919] :: 4476 ~ 4478, 2571 ms, 660 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[920] :: 4478 ~ 4479, 424 ms, 104 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[921] :: 4479 ~ 4480, 1399 ms, 368 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[922] :: 4504 ~ 4505, 633 ms, 108 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[923] :: 4505 ~ 4506, 1229 ms, 265 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[924] :: 4530 ~ 4531, 1301 ms, 299 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[925] :: 4531 ~ 4532, 1459 ms, 396 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[926] :: 4532 ~ 4534, 1458 ms, 386 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[927] :: 4536 ~ 4538, 1237 ms, 273 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[928] :: 4538 ~ 4541, 3308 ms, 800 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[929] :: 4592 ~ 4593, 559 ms, 124 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[930] :: 4593 ~ 4594, 1068 ms, 244 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[931] :: 4594 ~ 4596, 1884 ms, 445 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[932] :: 4598 ~ 4598, 160 ms, 30 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[933] :: 4598 ~ 4601, 3473 ms, 837 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[934] :: 4614 ~ 4614, 261 ms, 47 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[935] :: 4619 ~ 4622, 2402 ms, 591 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[936] :: 4622 ~ 4624, 1810 ms, 462 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[937] :: 4624 ~ 4626, 2346 ms, 607 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[938] :: 4633 ~ 4636, 2697 ms, 648 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[939] :: 4636 ~ 4638, 1902 ms, 514 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[940] :: 4681 ~ 4682, 1208 ms, 264 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[941] :: 4682 ~ 4683, 802 ms, 171 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[942] :: 4683 ~ 4685, 1929 ms, 446 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[943] :: 4687 ~ 4689, 2585 ms, 587 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[944] :: 4709 ~ 4710, 840 ms, 174 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[945] :: 4710 ~ 4712, 1755 ms, 494 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[946] :: 4712 ~ 4714, 1768 ms, 463 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[947] :: 4739 ~ 4741, 1791 ms, 406 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[948] :: 4743 ~ 4745, 1558 ms, 348 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[949] :: 4745 ~ 4747, 1839 ms, 379 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[950] :: 4747 ~ 4749, 2585 ms, 656 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[951] :: 4770 ~ 4770, 350 ms, 37 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[952] :: 4770 ~ 4772, 1974 ms, 479 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[953] :: 4775 ~ 4777, 1511 ms, 364 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[954] :: 4778 ~ 4778, 728 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[955] :: 4778 ~ 4780, 1769 ms, 471 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[956] :: 4801 ~ 4801, 428 ms, 53 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[957] :: 4801 ~ 4801, 374 ms, 84 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[958] :: 4826 ~ 4827, 1097 ms, 256 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[959] :: 4828 ~ 4828, 858 ms, 208 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[960] :: 4855 ~ 4857, 1420 ms, 316 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[961] :: 4861 ~ 4861, 414 ms, 93 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[962] :: 4880 ~ 4882, 2232 ms, 497 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[963] :: 4882 ~ 4884, 2078 ms, 502 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[964] :: 4884 ~ 4886, 1711 ms, 457 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[965] :: 4887 ~ 4889, 2019 ms, 507 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[966] :: 4889 ~ 4889, 561 ms, 141 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[967] :: 4891 ~ 4895, 3691 ms, 861 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[968] :: 4895 ~ 4897, 2765 ms, 656 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[969] :: 4901 ~ 4903, 2869 ms, 702 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[970] :: 4903 ~ 4904, 100 ms, 10 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[971] :: 4916 ~ 4917, 1373 ms, 323 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[972] :: 4922 ~ 4922, 140 ms, 12 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[973] :: 4935 ~ 4939, 3943 ms, 1012 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[974] :: 4950 ~ 4951, 709 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[975] :: 4951 ~ 4954, 2452 ms, 660 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[976] :: 4978 ~ 4979, 748 ms, 152 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[977] :: 5003 ~ 5004, 478 ms, 75 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[978] :: 5004 ~ 5007, 2840 ms, 651 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[979] :: 5013 ~ 5015, 2249 ms, 516 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[980] :: 5016 ~ 5019, 3734 ms, 935 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[981] :: 5025 ~ 5027, 1579 ms, 406 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[982] :: 5039 ~ 5040, 965 ms, 245 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[983] :: 5040 ~ 5042, 2247 ms, 551 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[984] :: 5047 ~ 5048, 1552 ms, 286 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[985] :: 5048 ~ 5052, 3533 ms, 893 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[986] :: 5060 ~ 5062, 2074 ms, 554 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[987] :: 5074 ~ 5075, 1246 ms, 256 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[988] :: 5075 ~ 5076, 1133 ms, 282 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[989] :: 5076 ~ 5079, 3011 ms, 825 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[990] :: 5082 ~ 5087, 4092 ms, 987 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[991] :: 5107 ~ 5109, 1695 ms, 376 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[992] :: 5135 ~ 5135, 223 ms, 27 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[993] :: 5138 ~ 5140, 2202 ms, 571 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[994] :: 5150 ~ 5151, 584 ms, 141 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[995] :: 5151 ~ 5153, 1763 ms, 440 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[996] :: 5164 ~ 5166, 1805 ms, 429 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[997] :: 5166 ~ 5168, 1910 ms, 460 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[998] :: 5168 ~ 5169, 1548 ms, 398 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[999] :: 5196 ~ 5198, 1980 ms, 507 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1000] :: 5198 ~ 5200, 2548 ms, 689 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1001] :: 5205 ~ 5208, 2774 ms, 665 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1002] :: 5226 ~ 5227, 1722 ms, 372 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1003] :: 5227 ~ 5230, 2779 ms, 736 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1004] :: 5230 ~ 5231, 543 ms, 127 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1005] :: 5231 ~ 5232, 1411 ms, 355 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1006] :: 5235 ~ 5235, 721 ms, 150 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1007] :: 5235 ~ 5237, 2168 ms, 496 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1008] :: 5259 ~ 5261, 1685 ms, 387 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1009] :: 5261 ~ 5263, 2782 ms, 735 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1010] :: 5263 ~ 5266, 2619 ms, 665 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1011] :: 5266 ~ 5268, 1937 ms, 446 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1012] :: 5292 ~ 5294, 1982 ms, 481 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1013] :: 5294 ~ 5297, 2633 ms, 652 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1014] :: 5321 ~ 5321, 518 ms, 79 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1015] :: 5322 ~ 5323, 794 ms, 161 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1016] :: 5349 ~ 5351, 2620 ms, 581 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1017] :: 5353 ~ 5356, 2896 ms, 761 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1018] :: 5376 ~ 5376, 78 ms, 1 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1019] :: 5376 ~ 5378, 1325 ms, 303 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1020] :: 5378 ~ 5380, 2461 ms, 698 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1021] :: 5381 ~ 5384, 3015 ms, 748 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1022] :: 5406 ~ 5408, 2642 ms, 580 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1023] :: 5408 ~ 5409, 419 ms, 103 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1024] :: 5409 ~ 5412, 2703 ms, 679 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1025] :: 5412 ~ 5413, 1717 ms, 442 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1026] :: 5417 ~ 5419, 1857 ms, 483 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1027] :: 5441 ~ 5441, 271 ms, 22 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1028] :: 5441 ~ 5442, 861 ms, 193 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1029] :: 5442 ~ 5444, 1480 ms, 307 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1030] :: 5447 ~ 5450, 2933 ms, 689 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1031] :: 5469 ~ 5471, 2000 ms, 461 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1032] :: 5471 ~ 5473, 2248 ms, 595 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1033] :: 5474 ~ 5477, 2644 ms, 672 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1034] :: 5479 ~ 5480, 1688 ms, 404 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1035] :: 5491 ~ 5495, 3892 ms, 929 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1036] :: 5495 ~ 5498, 3200 ms, 750 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1037] :: 5505 ~ 5506, 1797 ms, 428 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1038] :: 5506 ~ 5508, 1361 ms, 353 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1039] :: 5508 ~ 5510, 1048 ms, 229 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1040] :: 5533 ~ 5534, 1040 ms, 228 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1041] :: 5534 ~ 5536, 1879 ms, 489 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1042] :: 5543 ~ 5546, 2785 ms, 698 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1043] :: 5546 ~ 5548, 2720 ms, 690 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1044] :: 5567 ~ 5569, 2241 ms, 531 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1045] :: 5569 ~ 5571, 1943 ms, 481 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1046] :: 5572 ~ 5573, 1600 ms, 325 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1047] :: 5597 ~ 5598, 1038 ms, 245 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1048] :: 5598 ~ 5600, 1962 ms, 505 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1049] :: 5600 ~ 5602, 2299 ms, 575 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1050] :: 5608 ~ 5609, 1552 ms, 396 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1051] :: 5628 ~ 5629, 1070 ms, 230 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1052] :: 5629 ~ 5631, 1951 ms, 528 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1053] :: 5631 ~ 5633, 1816 ms, 493 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1054] :: 5633 ~ 5637, 3366 ms, 823 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1055] :: 5639 ~ 5641, 2044 ms, 501 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1056] :: 5641 ~ 5643, 2204 ms, 571 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1057] :: 5665 ~ 5665, 420 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1058] :: 5665 ~ 5667, 1511 ms, 386 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1059] :: 5667 ~ 5668, 1318 ms, 301 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1060] :: 5668 ~ 5671, 2522 ms, 668 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1061] :: 5695 ~ 5699, 3769 ms, 850 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1062] :: 5702 ~ 5703, 709 ms, 141 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1063] :: 5724 ~ 5725, 1245 ms, 280 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1064] :: 5725 ~ 5728, 2845 ms, 750 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1065] :: 5728 ~ 5732, 4135 ms, 944 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1066] :: 5759 ~ 5761, 1848 ms, 460 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1067] :: 5765 ~ 5768, 3594 ms, 883 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1068] :: 5768 ~ 5773, 4239 ms, 999 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1069] :: 5773 ~ 5775, 2841 ms, 691 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1070] :: 5775 ~ 5778, 2340 ms, 572 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1071] :: 5780 ~ 5783, 2944 ms, 619 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1072] :: 5783 ~ 5785, 2564 ms, 669 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1073] :: 5789 ~ 5792, 3332 ms, 850 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1074] :: 5799 ~ 5803, 4027 ms, 963 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1075] :: 5806 ~ 5807, 823 ms, 145 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1076] :: 5807 ~ 5809, 2363 ms, 591 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1077] :: 5809 ~ 5811, 2381 ms, 595 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1078] :: 5812 ~ 5816, 3795 ms, 1012 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1079] :: 5841 ~ 5842, 1428 ms, 326 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1080] :: 5842 ~ 5844, 2314 ms, 642 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1081] :: 5844 ~ 5846, 1451 ms, 321 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1082] :: 5846 ~ 5847, 714 ms, 187 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1083] :: 5886 ~ 5888, 1510 ms, 344 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1084] :: 5888 ~ 5889, 1538 ms, 413 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1085] :: 5901 ~ 5903, 1714 ms, 388 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1086] :: 5903 ~ 5904, 1467 ms, 388 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1087] :: 5904 ~ 5906, 1708 ms, 459 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1088] :: 5931 ~ 5933, 1458 ms, 310 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1089] :: 5933 ~ 5934, 1473 ms, 392 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1090] :: 5937 ~ 5937, 577 ms, 113 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1091] :: 5937 ~ 5940, 2350 ms, 591 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1092] :: 5940 ~ 5943, 2492 ms, 638 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1093] :: 5943 ~ 5945, 2056 ms, 521 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1094] :: 5960 ~ 5960, 278 ms, 57 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1095] :: 5966 ~ 5968, 2151 ms, 548 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1096] :: 5968 ~ 5970, 2658 ms, 696 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1097] :: 5970 ~ 5972, 1769 ms, 440 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1098] :: 5975 ~ 5978, 3191 ms, 820 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1099] :: 6026 ~ 6026, 418 ms, 62 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1100] :: 6026 ~ 6028, 1259 ms, 321 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1101] :: 6031 ~ 6034, 2722 ms, 743 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1102] :: 6055 ~ 6056, 1463 ms, 307 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1103] :: 6056 ~ 6057, 1139 ms, 305 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1104] :: 6058 ~ 6059, 1206 ms, 259 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1105] :: 6083 ~ 6084, 442 ms, 70 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1106] :: 6084 ~ 6084, 883 ms, 218 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1107] :: 6084 ~ 6088, 3078 ms, 812 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1108] :: 6113 ~ 6115, 1620 ms, 354 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1109] :: 6121 ~ 6122, 1358 ms, 366 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1110] :: 6134 ~ 6136, 2187 ms, 506 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1111] :: 6142 ~ 6144, 1714 ms, 339 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1112] :: 6144 ~ 6145, 1154 ms, 306 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1113] :: 6171 ~ 6172, 880 ms, 184 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1114] :: 6172 ~ 6173, 1341 ms, 335 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1115] :: 6176 ~ 6177, 1261 ms, 278 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1116] :: 6180 ~ 6181, 1030 ms, 246 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1117] :: 6200 ~ 6201, 652 ms, 102 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1118] :: 6201 ~ 6204, 2847 ms, 674 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1119] :: 6204 ~ 6207, 2679 ms, 699 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1120] :: 6209 ~ 6212, 3253 ms, 803 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1121] :: 6234 ~ 6234, 42 ms, 1 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1122] :: 6234 ~ 6234, 644 ms, 99 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1123] :: 6235 ~ 6235, 493 ms, 117 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1124] :: 6235 ~ 6237, 2429 ms, 607 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1125] :: 6238 ~ 6241, 3595 ms, 826 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1126] :: 6244 ~ 6245, 1259 ms, 295 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1127] :: 6245 ~ 6247, 1959 ms, 521 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1128] :: 6263 ~ 6267, 4197 ms, 992 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1129] :: 6273 ~ 6274, 1366 ms, 283 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1130] :: 6274 ~ 6277, 2543 ms, 691 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1131] :: 6297 ~ 6300, 2940 ms, 750 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1132] :: 6300 ~ 6302, 1710 ms, 443 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1133] :: 6302 ~ 6303, 1377 ms, 375 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1134] :: 6304 ~ 6306, 2535 ms, 635 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1135] :: 6330 ~ 6331, 1162 ms, 241 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1136] :: 6331 ~ 6333, 1355 ms, 354 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1137] :: 6333 ~ 6334, 1401 ms, 354 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1138] :: 6359 ~ 6361, 1490 ms, 357 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1139] :: 6385 ~ 6386, 582 ms, 89 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1140] :: 6386 ~ 6388, 2116 ms, 463 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1141] :: 6388 ~ 6388, 526 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1142] :: 6388 ~ 6391, 2130 ms, 563 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1143] :: 6392 ~ 6395, 3592 ms, 860 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1144] :: 6395 ~ 6399, 3432 ms, 887 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1145] :: 6423 ~ 6424, 1114 ms, 233 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1146] :: 6424 ~ 6426, 2279 ms, 576 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1147] :: 6427 ~ 6428, 1403 ms, 297 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1148] :: 6428 ~ 6429, 638 ms, 139 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1149] :: 6457 ~ 6458, 1816 ms, 404 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1150] :: 6458 ~ 6463, 4279 ms, 1035 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1151] :: 6477 ~ 6477, 315 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1152] :: 6483 ~ 6485, 2453 ms, 562 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1153] :: 6485 ~ 6487, 2501 ms, 647 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1154] :: 6488 ~ 6490, 2460 ms, 572 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1155] :: 6490 ~ 6492, 2303 ms, 631 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1156] :: 6516 ~ 6517, 471 ms, 72 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1157] :: 6520 ~ 6523, 2828 ms, 608 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1158] :: 6525 ~ 6526, 1459 ms, 379 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1159] :: 6544 ~ 6545, 931 ms, 189 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1160] :: 6545 ~ 6547, 2382 ms, 614 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1161] :: 6547 ~ 6549, 1998 ms, 507 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1162] :: 6549 ~ 6551, 1925 ms, 457 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1163] :: 6584 ~ 6585, 1181 ms, 300 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1164] :: 6585 ~ 6585, 643 ms, 152 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1165] :: 6597 ~ 6598, 1275 ms, 350 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1166] :: 6604 ~ 6604, 660 ms, 114 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1167] :: 6604 ~ 6608, 4040 ms, 1013 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1168] :: 6614 ~ 6616, 1773 ms, 397 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1169] :: 6616 ~ 6618, 2455 ms, 579 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1170] :: 6631 ~ 6633, 2208 ms, 552 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1171] :: 6637 ~ 6638, 735 ms, 139 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1172] :: 6638 ~ 6639, 992 ms, 263 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1173] :: 6639 ~ 6643, 3987 ms, 1016 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1174] :: 6647 ~ 6648, 1831 ms, 432 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1175] :: 6648 ~ 6650, 1779 ms, 430 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1176] :: 6670 ~ 6671, 493 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1177] :: 6674 ~ 6677, 2723 ms, 666 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1178] :: 6677 ~ 6677, 154 ms, 27 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1179] :: 6678 ~ 6679, 1306 ms, 321 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1180] :: 6698 ~ 6698, 314 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1181] :: 6699 ~ 6701, 2306 ms, 563 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1182] :: 6704 ~ 6707, 3026 ms, 747 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1183] :: 6726 ~ 6727, 685 ms, 136 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1184] :: 6731 ~ 6731, 80 ms, 7 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1185] :: 6733 ~ 6737, 3885 ms, 976 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1186] :: 6738 ~ 6740, 2580 ms, 638 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1187] :: 6740 ~ 6743, 2306 ms, 604 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1188] :: 6760 ~ 6761, 1106 ms, 257 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1189] :: 6785 ~ 6786, 1134 ms, 253 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1190] :: 6787 ~ 6789, 1193 ms, 269 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1191] :: 6789 ~ 6791, 2693 ms, 693 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1192] :: 6839 ~ 6841, 2467 ms, 570 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1193] :: 6841 ~ 6844, 2807 ms, 708 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1194] :: 6846 ~ 6848, 1956 ms, 399 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1195] :: 6848 ~ 6850, 1990 ms, 441 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1196] :: 6871 ~ 6871, 341 ms, 43 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1197] :: 6871 ~ 6872, 1487 ms, 369 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1198] :: 6872 ~ 6876, 3158 ms, 778 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1199] :: 6877 ~ 6877, 55 ms, 1 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1200] :: 6879 ~ 6882, 3500 ms, 801 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1201] :: 6882 ~ 6884, 1821 ms, 461 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1202] :: 6889 ~ 6889, 55 ms, 1 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1203] :: 6899 ~ 6900, 372 ms, 78 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1204] :: 6906 ~ 6906, 560 ms, 90 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1205] :: 6931 ~ 6933, 2237 ms, 501 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1206] :: 6939 ~ 6939, 698 ms, 131 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1207] :: 6939 ~ 6942, 2850 ms, 794 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1208] :: 6953 ~ 6956, 2733 ms, 690 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1209] :: 6960 ~ 6962, 2317 ms, 532 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1210] :: 6962 ~ 6966, 3674 ms, 887 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1211] :: 6966 ~ 6967, 1590 ms, 385 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1212] :: 6992 ~ 6992, 67 ms, 1 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1213] :: 6996 ~ 6997, 1036 ms, 238 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1214] :: 6997 ~ 6998, 1451 ms, 319 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1215] :: 7013 ~ 7014, 308 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1216] :: 7019 ~ 7021, 2025 ms, 480 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1217] :: 7027 ~ 7029, 1857 ms, 451 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1218] :: 7030 ~ 7034, 4626 ms, 1009 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1219] :: 7034 ~ 7036, 1943 ms, 519 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1220] :: 7044 ~ 7047, 2853 ms, 711 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1221] :: 7055 ~ 7055, 783 ms, 200 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1222] :: 7056 ~ 7059, 3827 ms, 978 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1223] :: 7059 ~ 7061, 1267 ms, 332 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1224] :: 7074 ~ 7075, 1396 ms, 343 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1225] :: 7085 ~ 7085, 678 ms, 105 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1226] :: 7086 ~ 7087, 1485 ms, 323 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1227] :: 7087 ~ 7090, 2543 ms, 651 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1228] :: 7116 ~ 7118, 2268 ms, 539 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1229] :: 7118 ~ 7121, 2613 ms, 666 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1230] :: 7140 ~ 7141, 577 ms, 99 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1231] :: 7141 ~ 7141, 561 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1232] :: 7141 ~ 7142, 832 ms, 209 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1233] :: 7142 ~ 7144, 1288 ms, 328 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1234] :: 7145 ~ 7147, 1957 ms, 497 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1235] :: 7170 ~ 7172, 1927 ms, 457 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1236] :: 7172 ~ 7174, 1844 ms, 472 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1237] :: 7174 ~ 7176, 1824 ms, 482 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1238] :: 7179 ~ 7183, 3979 ms, 968 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1239] :: 7184 ~ 7186, 1835 ms, 438 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1240] :: 7186 ~ 7188, 2583 ms, 690 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1241] :: 7207 ~ 7211, 4092 ms, 1012 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1242] :: 7212 ~ 7213, 1048 ms, 232 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1243] :: 7215 ~ 7219, 4174 ms, 915 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1244] :: 7239 ~ 7240, 724 ms, 147 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1245] :: 7240 ~ 7242, 2445 ms, 617 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1246] :: 7249 ~ 7250, 965 ms, 213 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1247] :: 7268 ~ 7269, 1211 ms, 276 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1248] :: 7271 ~ 7273, 2154 ms, 514 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1249] :: 7274 ~ 7276, 1816 ms, 424 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1250] :: 7276 ~ 7278, 2174 ms, 543 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1251] :: 7287 ~ 7289, 2073 ms, 450 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1252] :: 7298 ~ 7300, 1788 ms, 443 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1253] :: 7301 ~ 7305, 4189 ms, 1012 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1254] :: 7309 ~ 7313, 3968 ms, 947 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1255] :: 7313 ~ 7316, 2918 ms, 704 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1256] :: 7319 ~ 7321, 2194 ms, 546 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1257] :: 7321 ~ 7323, 2263 ms, 561 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1258] :: 7334 ~ 7335, 418 ms, 94 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1259] :: 7340 ~ 7341, 1469 ms, 338 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1260] :: 7341 ~ 7342, 917 ms, 240 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1261] :: 7343 ~ 7345, 1341 ms, 301 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1262] :: 7347 ~ 7350, 2272 ms, 610 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1263] :: 7370 ~ 7371, 731 ms, 125 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1264] :: 7375 ~ 7375, 109 ms, 12 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1265] :: 7377 ~ 7379, 1577 ms, 379 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1266] :: 7379 ~ 7381, 1788 ms, 445 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1267] :: 7398 ~ 7400, 1745 ms, 426 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1268] :: 7402 ~ 7404, 1943 ms, 472 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1269] :: 7428 ~ 7430, 2466 ms, 624 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1270] :: 7430 ~ 7433, 2971 ms, 752 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1271] :: 7435 ~ 7438, 2787 ms, 712 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1272] :: 7440 ~ 7444, 4728 ms, 929 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1273] :: 7460 ~ 7460, 502 ms, 74 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1274] :: 7460 ~ 7461, 520 ms, 128 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1275] :: 7486 ~ 7487, 660 ms, 124 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1276] :: 7490 ~ 7492, 1701 ms, 452 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1277] :: 7495 ~ 7497, 2066 ms, 470 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1278] :: 7497 ~ 7500, 3424 ms, 907 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1279] :: 7516 ~ 7517, 442 ms, 78 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1280] :: 7520 ~ 7521, 735 ms, 152 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1281] :: 7521 ~ 7523, 1988 ms, 482 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1282] :: 7542 ~ 7543, 380 ms, 60 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1283] :: 7544 ~ 7545, 485 ms, 90 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1284] :: 7562 ~ 7563, 1105 ms, 238 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1285] :: 7563 ~ 7564, 1243 ms, 312 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1286] :: 7568 ~ 7569, 639 ms, 111 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1287] :: 7569 ~ 7569, 151 ms, 35 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1288] :: 7572 ~ 7574, 2457 ms, 569 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1289] :: 7574 ~ 7574, 161 ms, 24 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1290] :: 7594 ~ 7594, 245 ms, 20 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1291] :: 7594 ~ 7597, 2770 ms, 699 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1292] :: 7627 ~ 7627, 52 ms, 0 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1293] :: 7644 ~ 7644, 432 ms, 58 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1294] :: 7669 ~ 7670, 1650 ms, 386 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1295] :: 7671 ~ 7672, 963 ms, 204 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1296] :: 7672 ~ 7674, 2010 ms, 510 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1297] :: 7678 ~ 7680, 1613 ms, 389 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1298] :: 7680 ~ 7684, 3532 ms, 821 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1299] :: 7690 ~ 7693, 3212 ms, 781 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1300] :: 7693 ~ 7694, 1094 ms, 262 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1301] :: 7702 ~ 7703, 881 ms, 164 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1302] :: 7703 ~ 7704, 1308 ms, 321 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1303] :: 7704 ~ 7706, 1255 ms, 339 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1304] :: 7706 ~ 7710, 4126 ms, 910 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1305] :: 7711 ~ 7712, 995 ms, 220 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1306] :: 7712 ~ 7714, 1792 ms, 430 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1307] :: 7736 ~ 7736, 420 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1308] :: 7740 ~ 7741, 775 ms, 164 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1309] :: 7741 ~ 7743, 1523 ms, 402 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1310] :: 7761 ~ 7762, 1046 ms, 187 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1311] :: 7762 ~ 7764, 1304 ms, 326 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1312] :: 7786 ~ 7788, 2092 ms, 526 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1313] :: 7791 ~ 7794, 2576 ms, 621 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1314] :: 7814 ~ 7816, 2208 ms, 528 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1315] :: 7821 ~ 7823, 1918 ms, 451 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1316] :: 7823 ~ 7823, 153 ms, 26 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1317] :: 7841 ~ 7842, 518 ms, 75 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1318] :: 7842 ~ 7844, 2414 ms, 659 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1319] :: 7868 ~ 7868, 625 ms, 101 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1320] :: 7868 ~ 7870, 2007 ms, 518 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1321] :: 7870 ~ 7874, 3697 ms, 879 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1322] :: 7896 ~ 7899, 2262 ms, 544 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1323] :: 7903 ~ 7903, 654 ms, 130 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1324] :: 7903 ~ 7904, 773 ms, 173 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1325] :: 7904 ~ 7907, 2546 ms, 586 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1326] :: 7908 ~ 7910, 2017 ms, 490 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1327] :: 7911 ~ 7911, 330 ms, 54 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1328] :: 7911 ~ 7913, 2334 ms, 526 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1329] :: 7918 ~ 7918, 483 ms, 104 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1330] :: 7929 ~ 7931, 2016 ms, 470 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1331] :: 7931 ~ 7935, 3909 ms, 942 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1332] :: 7935 ~ 7939, 4140 ms, 990 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1333] :: 7942 ~ 7945, 2990 ms, 748 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1334] :: 7954 ~ 7954, 284 ms, 62 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1335] :: 7965 ~ 7968, 3161 ms, 778 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1336] :: 7968 ~ 7970, 1972 ms, 490 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1337] :: 7971 ~ 7974, 2222 ms, 508 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1338] :: 7975 ~ 7975, 128 ms, 15 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1339] :: 7994 ~ 7995, 1399 ms, 324 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1340] :: 8018 ~ 8020, 1841 ms, 369 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1341] :: 8020 ~ 8022, 1763 ms, 483 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1342] :: 8024 ~ 8028, 3912 ms, 815 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1343] :: 8034 ~ 8037, 2547 ms, 606 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1344] :: 8040 ~ 8043, 2946 ms, 723 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1345] :: 8043 ~ 8044, 528 ms, 111 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1346] :: 8053 ~ 8055, 2835 ms, 704 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1347] :: 8056 ~ 8058, 2580 ms, 581 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1348] :: 8062 ~ 8062, 952 ms, 223 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1349] :: 8075 ~ 8077, 1480 ms, 393 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1350] :: 8082 ~ 8085, 3078 ms, 759 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1351] :: 8086 ~ 8090, 3607 ms, 848 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1352] :: 8090 ~ 8092, 2640 ms, 723 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1353] :: 8095 ~ 8098, 2754 ms, 662 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1354] :: 8098 ~ 8099, 1085 ms, 260 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1355] :: 8113 ~ 8113, 296 ms, 60 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1356] :: 8118 ~ 8119, 664 ms, 121 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1357] :: 8119 ~ 8120, 1356 ms, 317 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1358] :: 8120 ~ 8123, 2536 ms, 673 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1359] :: 8126 ~ 8128, 2336 ms, 513 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1360] :: 8128 ~ 8132, 3832 ms, 1009 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1361] :: 8175 ~ 8176, 699 ms, 113 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1362] :: 8176 ~ 8177, 1229 ms, 323 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1363] :: 8177 ~ 8179, 2514 ms, 601 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1364] :: 8180 ~ 8184, 3961 ms, 1009 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1365] :: 8189 ~ 8192, 2689 ms, 606 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1366] :: 8198 ~ 8199, 317 ms, 64 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1367] :: 8209 ~ 8210, 1283 ms, 334 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1368] :: 8210 ~ 8214, 3100 ms, 767 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1369] :: 8214 ~ 8218, 4117 ms, 1013 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1370] :: 8218 ~ 8219, 1186 ms, 286 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1371] :: 8219 ~ 8223, 4094 ms, 940 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1372] :: 8249 ~ 8249, 460 ms, 90 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1373] :: 8253 ~ 8253, 103 ms, 5 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1374] :: 8264 ~ 8266, 2058 ms, 507 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1375] :: 8266 ~ 8269, 2461 ms, 590 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1376] :: 8271 ~ 8274, 2930 ms, 734 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1377] :: 8274 ~ 8275, 1720 ms, 452 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1378] :: 8279 ~ 8282, 3373 ms, 812 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1379] :: 8284 ~ 8287, 2738 ms, 704 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1380] :: 8300 ~ 8300, 413 ms, 93 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1381] :: 8306 ~ 8310, 4476 ms, 977 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1382] :: 8310 ~ 8314, 3310 ms, 731 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1383] :: 8314 ~ 8315, 975 ms, 262 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1384] :: 8321 ~ 8323, 2117 ms, 507 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1385] :: 8341 ~ 8342, 1256 ms, 303 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1386] :: 8342 ~ 8344, 1635 ms, 422 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1387] :: 8346 ~ 8349, 3750 ms, 844 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1388] :: 8370 ~ 8371, 1142 ms, 293 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1389] :: 8372 ~ 8372, 823 ms, 167 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1390] :: 8372 ~ 8375, 2748 ms, 725 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1391] :: 8375 ~ 8377, 1399 ms, 359 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1392] :: 8381 ~ 8383, 2404 ms, 507 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1393] :: 8383 ~ 8387, 3698 ms, 834 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1394] :: 8406 ~ 8407, 1245 ms, 267 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1395] :: 8407 ~ 8408, 905 ms, 223 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1396] :: 8408 ~ 8410, 1824 ms, 474 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1397] :: 8417 ~ 8420, 3019 ms, 700 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1398] :: 8425 ~ 8426, 1363 ms, 289 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1399] :: 8426 ~ 8430, 3272 ms, 843 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1400] :: 8437 ~ 8438, 875 ms, 183 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1401] :: 8462 ~ 8465, 3098 ms, 686 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1402] :: 8465 ~ 8467, 2024 ms, 510 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1403] :: 8470 ~ 8473, 2760 ms, 630 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1404] :: 8473 ~ 8476, 2658 ms, 719 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1405] :: 8476 ~ 8477, 1556 ms, 397 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1406] :: 8486 ~ 8486, 666 ms, 140 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1407] :: 8496 ~ 8498, 1582 ms, 340 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1408] :: 8498 ~ 8500, 1742 ms, 452 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1409] :: 8500 ~ 8504, 3795 ms, 1012 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1410] :: 8504 ~ 8506, 2367 ms, 633 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1411] :: 8506 ~ 8507, 1131 ms, 302 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1412] :: 8510 ~ 8514, 3595 ms, 919 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1413] :: 8514 ~ 8518, 3804 ms, 976 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1414] :: 8527 ~ 8529, 2152 ms, 508 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1415] :: 8539 ~ 8540, 1589 ms, 409 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1416] :: 8540 ~ 8543, 2848 ms, 669 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1417] :: 8543 ~ 8546, 2928 ms, 747 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1418] :: 8546 ~ 8549, 2490 ms, 590 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1419] :: 8554 ~ 8557, 2907 ms, 658 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1420] :: 8560 ~ 8560, 170 ms, 25 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1421] :: 8576 ~ 8578, 1782 ms, 431 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1422] :: 8578 ~ 8580, 2563 ms, 656 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1423] :: 8583 ~ 8585, 2150 ms, 539 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1424] :: 8631 ~ 8632, 778 ms, 198 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1425] :: 8635 ~ 8636, 1756 ms, 387 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1426] :: 8636 ~ 8637, 665 ms, 173 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1427] :: 8646 ~ 8649, 2332 ms, 657 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1428] :: 8660 ~ 8663, 2948 ms, 748 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1429] :: 8663 ~ 8663, 766 ms, 173 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1430] :: 8663 ~ 8664, 867 ms, 231 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1431] :: 8667 ~ 8671, 3594 ms, 806 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+[1432] :: 8671 ~ 8673, 2452 ms, 571 (MB), Reclaimed Zone : 1, ZLV: 0.000000
+Total ZC Copied (MB) :: 489818, Recaimed by ZC :: 1432 
+Total ZC copied- GC_BYTES_WRITTEN(MB):: 489818 
+Reset Count (R+ZC) : 282+1432=1714
+Finish Count : 0
+Average ZLV :: 0.000000
+propagation count : 45
+TOTAL I/O BLOKCING TIME 3620
+TOTAL I/O BLOCKING TIME(ms) 2202322
+Cumulative I/O Blocking(ms) 2202322
+Calculate Lifetime Time(ms) 2265
+copy/written ratio : 513612374998/1501906226218=34
+level[0]: 분자(overlapping) 170441998273 / 분모(file size) 112160022823 = 1.5196
+level[1]: 분자(overlapping) 440391119384 / 분모(file size) 110164236811 = 3.9976
+level[2]: 분자(overlapping) 313275690613 / 분모(file size) 97814577206 = 3.2028
+level[3]: 분자(overlapping) 0 / 분모(file size) 34449764471 = 0.0000
+level[4]: 분자(overlapping) 0 / 분모(file size) 0 = 0.0000
+avg deletion after time 501660725 us (total: 1758320843742 us, count: 3505)
+reset_count_before_full_ 0 reset_size_before_full_ 0
+SEQUENCE DISTRIBUTION
+52 39 65 91 51 26 6 33 8 2 33 17 4 4 2 8 13 8 31 13 11 29 24 17 23 16 9 7 26 3 10 12 6 9 9 6 25 17 17 19 17 25 32 24 7 7 3 10 5 6 3 3 2 3 9 4 9 20 8 21 8 15 9 33 14 15 8 15 2 14 9 7 10 7 8 5 16 15 16 16 23 6 16 20 11 8 3 11 5 2 1 3 6 8 5 3 13 4 14 17 19 6 8 14 3 6 2 1 3 2 2 4 11 4 1 1 6 7 5 21 5 2 8 1 0 3 3 0 1 1 3 5 7 2 7 7 6 7 1 1 3 3 2 5 1 1 11 1 12 1 10 14 11 11 9 11 7 8 9 16 1 1 6 6 5 7 6 6 4 4 0 9 4 8 20 3 5 5 11 7 6 2 4 4 3 6 1 1 3 1 4 10 1 2 2 1 8 3 1 8 4 1 0 3 0 2 1 7 3 0 6 3 7 1 1 10 1 2 2 2 2 1 5 6 1 2 8 9 3 2 2 4 9 4 0 5 6 3 1 2 10 2 0 5 6 9 6 5 10 1 7 6 2 2 2 0 2 1 2 3 0 1 1 0 0 2 5 0 7 2 5 7 1 8 3 5 2 2 4 1 1 2 1 8 3 2 3 2 6 0 4 1 1 1 2 0 2 0 0 2 1 1 1 7 5 6 0 0 0 3 1 3 0 1 6 2 3 2 4 4 7 4 5 9 1 0 13 3 6 9 0 0 2 1 0 0 3 2 3 1 5 2 6 5 2 1 4 1 2 1 0 4 2 1 3 2 0 1 1 0 2 4 4 0 4 1 0 2 0 1 3 1 1 0 2 0 3 0 1 3 2 1 2 0 5 0 0 2 0 0 0 1 5 3 1 0 4 3 3 4 1 0 4 2 2 1 2 0 1 0 4 0 3 2 2 6 6 2 5 6 3 1 2 2 0 1 4 0 1 1 0 3 1 1 3 2 0 9 10 0 0 0 0 0 1 0 0 2 2 1 1 0 0 1 1 1 0 4 0 2 0 2 0 2 0 0 4 0 0 3 6 3 8 1 0 5 2 1 5 0 0 2 1 2 0 3 1 2 2 3 1 0 2 1 0 1 1 1 0 3 4 1 0 4 1 8 2 0 1 0 0 0 1 2 1 0 0 2 0 3 0 0 1 4 0 0 0 0 1 1 1 0 2 1 0 2 0 0 3 0 0 1 1 1 1 0 0 0 1 1 2 4 0 0 0 2 1 0 2 0 1 0 0 0 0 6 0 3 1 3 0 0 3 1 0 4 0 0 1 2 3 3 0 2 0 6 0 1 0 0 1 3 0 0 0 1 0 0 0 2 1 0 0 5 1 1 0 0 0 1 1 1 0 0 0 0 0 2 1 0 0 1 2 0 0 0 0 2 4 1 0 0 0 0 0 1 0 0 5 0 2 1 2 0 1 0 1 1 1 0 0 0 1 0 0 4 0 2 0 0 0 0 2 0 1 2 1 1 0 4 1 0 0 1 0 2 0 2 1 1 1 0 0 0 1 0 0 1 0 1 1 0 1 1 0 0 1 2 1 3 1 1 1 0 0 0 0 0 0 0 0 0 0 1 0 0 1 0 0 0 1 3 0 0 2 1 0 0 3 0 1 1 1 1 2 2 0 2 1 0 0 1 1 0 2 1 1 0 2 0 2 1 3 0 2 2 0 1 0 0 0 2 0 0 0 0 0 1 0 4 0 1 2 0 4 0 1 0 1 0 0 0 0 1 0 1 0 0 1 1 0 0 4 0 3 1 0 3 0 1 0 0 0 1 1 0 0 0 0 0 0 0 2 1 1 0 1 0 2 3 0 1 0 0 0 1 3 1 2 0 2 1 1 0 1 0 0 0 0 2 0 0 1 2 0 0 1 1 1 1 0 0 0 1 0 0 0 0 0 2 2 0 0 0 0 0 1 0 0 0 0 1 0 1 0 3 0 1 1 0 1 0 0 0 1 2 2 0 0 1 0 0 0 0 0 0 0 1 0 1 1 0 0 1 0 0 1 1 0 0 0 1 4 3 0 0 0 0 0 4 0 0 0 0 0 0 1 1 0 0 0 0 0 0 0 0 0 1 0 0 1 0 0 1 0 2 0 1 0 0 0 0 0 0 0 0 3 0 1 2 1 4 0 0 1 0 1 1 1 1 0 1 0 0 1 0 1 0 1 0 0 4 1 0 0 1 0 0 0 0 3 0 1 0 0 0 2 0 1 0 1 0 0 2 0 0 0 0 0 0 1 3 0 0 0 0 0 0 2 0 0 0 0 4 1 1 0 0 1 0 0 0 0 0 2 0 0 0 0 0 0 0 1 2 2 1 0 0 0 0 1 0 0 0 0 0 0 2 1 1 0 0 1 0 0 0 0 0 0 3 3 0 0 0 1 0 0 0 0 2 1 0 0 0 0 1 1 0 1 1 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 4 0 1 1 0 0 0 0 0 0 0 1 1 0 0 0 1 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 1 0 1 2 0 0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 2 0 0 0 2 0 0 0 0 0 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 1 2 0 0 0 1 0 0 0 0 0 0 0 2 0 0 0 1 0 0 0 1 0 0 1 0 0 0 0 3 1 0 0 0 1 1 0 0 0 0 1 0 2 0 0 0 0 0 0 0 0 0 0 1 0 0 1 0 0 0 0 0 0 0 0 0 0 1 0 1 0 0 0 1 0 4 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 1 0 0 2 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 1 0 0 1 0 0 2 0 2 2 0 1 0 2 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 1 0 0 0 3 0 0 0 0 0 0 0 1 1 0 0 1 0 0 0 1 0 0 0 0 0 0 0 0 2 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 0 1 0 0 0 0 1 1 0 0 0 0 0 1 1 0 0 0 0 0 0 1 0 1 0 0 1 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 1 0 0 0 0 0 0 0 1 1 0 1 0 0 1 0 1 0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 1 0 0 0 0 0 0 0 1 0 0 0 0 0 3 2 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 1 0 0 0 0 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 1 0 1 0 0 0 0 0 0 0 1 0 0 0 0 0 0 1 0 0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 1 0 0 0 1 0 1 0 0 0 0 2 0 0 0 0 0 0 0 0 0 2 1 0 0 0 0 3 0 1 0 0 0 0 0 0 0 0 0 1 0 1 0 2 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 1 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 0 0 4 0 0 0 1 0 0 1 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 1 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 2 0 0 0 0 1 0 1 0 0 0 0 1 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 1 0 0 0 0 0 0 1 0 0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 3 0 0 1 0 0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3 0 0 0 0 0 0 0 2 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 11 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 1 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 4 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 1 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 2 0 0 0 0 1 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 10 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 12 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 4 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 3 0 0 0 7 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 5 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 6 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 4 0 0 3 0 0 0 4 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 6 0 0 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 4 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 FILE SIZE DISTRIBUITION
+191 74 66 63 76 76 73 83 73 84 93 98 98 84 93 74 106 110 110 86 91 123 99 98 97 95 70 93 85 70 86 101 84 86 89 3114 118 78 93 101 95 79 96 101 89 90 96 112 85 112 98 117 84 106 118 112 114 120 102 135 118 115 114 3105 14445 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 PrintMisPredictStats
+[Accumulated Stats] right_vertical_total=7445, false_vertical_total=9291, right_horizontal_total=2300060, false_horizontal_total=53044
+[Accumulated] Vertical false/(right+false) = 0.555151 (≈ 55.5151%)
+[Accumulated] Horizontal false/(right+false) = 0.0225421 (≈ 2.25421%)
+minsky@minsky-MS-7E13:~/EZC/data$ 
+
+

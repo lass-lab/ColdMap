@@ -1,3 +1,9 @@
+# VLDB Coldmap
+
+You need to compile with ./remake script we provide, with some dependencies(-lsnappy -lgflags -ldl -lz -lzbd -luring).
+
+Note that -lzbd is libzbd, available at https://github.com/westerndigitalcorporation/libzbd.
+
 # YCSB-cpp
 
 Yahoo! Cloud Serving Benchmark([YCSB](https://github.com/brianfrankcooper/YCSB/wiki)) written in C++.

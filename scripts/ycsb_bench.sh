@@ -8,7 +8,7 @@ RESULT_DIR_PATH="/home/minsky/EZC/data"
 #   target_file_size_base=67108864
 ZNS=nvme1n2
 # zipfian and uniform are also included in here, but you need to modify DoInsert() function in core/core_workload.cc in YCSB-cpp 
-for WORKLOAD_TYPE in a b c d e f _nutanix
+for WORKLOAD_TYPE in a b c d e f _nutanix _zipfian _uniform
 do
     for alpha in 0.5
     do

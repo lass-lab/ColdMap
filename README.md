@@ -20,7 +20,7 @@ cd src && sudo DEBUG_LEVEL=0 ROCKSDB_PLUGINS=zenfs make  db_bench install -j16
 ```
 
 
-# Todo 
+# Todo for authors.
 1) Change minsky(author's local directory) to $HOME.
 2) upload mariadb source code compatible with rocksdb-zenfs.
 3) upload missing experiment result(zipfian,nutanix,fillrandom,uniform)

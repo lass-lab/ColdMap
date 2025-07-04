@@ -19,3 +19,5 @@ git submodule update
 cmake .  -DUPDATE_SUBMODULES=OFF \
         -DROCKSDB_SOURCE_DIR=/home/minsky/EZC/rocksdb
 ```
+
+Note : You need to copy paste ColdMap' source code to mariadb-10.2/storage/rocksdb/rocksdb. if not, it will add posix rocksdb, not rocksdb-zns

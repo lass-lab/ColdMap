@@ -4,6 +4,7 @@ plugin-dir=/home/minsky/mariadb-10.2/storage/rocksdb
 language=/home/minsky/mariadb-10.2/sql/share/english
 socket=/tmp/mysql.sock
 port=3307
+max_connections=10240
 
 plugin-load=ha_rocksdb
 default-storage-engine=rocksdb
